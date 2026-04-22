@@ -115,6 +115,7 @@ export interface LeagueEntry {
   tier: string;
   rank: string;
   summonerId: string;
+  puuid?: string;
   leaguePoints: number;
   wins: number;
   losses: number;
@@ -130,6 +131,16 @@ export async function getRankedBySummonerId(
 ): Promise<LeagueEntry[]> {
   const host = PLATFORM_HOSTS[platform];
   const url = `https://${host}/lol/league/v4/entries/by-summoner/${summonerId}`;
+  return riotFetch<LeagueEntry[]>(url, 120_000);
+}
+
+// Newer PUUID-based ranked endpoint — preferred when available
+export async function getRankedByPuuid(
+  platform: Platform,
+  puuid: string
+): Promise<LeagueEntry[]> {
+  const host = PLATFORM_HOSTS[platform];
+  const url = `https://${host}/lol/league/v4/entries/by-puuid/${puuid}`;
   return riotFetch<LeagueEntry[]>(url, 120_000);
 }
 
@@ -164,13 +175,32 @@ export async function getChallengerLeague(
 
 // ========================= Match History =========================
 
+export interface GetMatchIdsOptions {
+  start?: number;
+  count?: number;
+  queue?: number; // queue id filter (e.g. 420 for ranked solo)
+  type?: 'ranked' | 'normal' | 'tourney' | 'tutorial';
+}
+
 export async function getMatchIds(
   platform: Platform,
   puuid: string,
-  count = 10
+  options: GetMatchIdsOptions | number = {}
 ): Promise<string[]> {
+  // Back-compat: old signature was (platform, puuid, count: number)
+  const opts: GetMatchIdsOptions =
+    typeof options === 'number' ? { count: options } : options;
+  const { start = 0, count = 10, queue, type } = opts;
+
   const host = REGIONAL_HOSTS[regionalFor(platform)];
-  const url = `https://${host}/lol/match/v5/matches/by-puuid/${puuid}/ids?start=0&count=${count}`;
+  const params = new URLSearchParams({
+    start: String(start),
+    count: String(Math.min(count, 100)),
+  });
+  if (queue !== undefined) params.set('queue', String(queue));
+  if (type) params.set('type', type);
+
+  const url = `https://${host}/lol/match/v5/matches/by-puuid/${puuid}/ids?${params}`;
   return riotFetch<string[]>(url, 60_000);
 }
 
@@ -201,14 +231,57 @@ export interface MatchParticipant {
   summoner1Id: number;
   summoner2Id: number;
   perks?: {
+    statPerks?: { defense: number; flex: number; offense: number };
     styles: Array<{
-      description: string;
-      style: number;
-      selections: Array<{ perk: number }>;
+      description: string; // 'primaryStyle' | 'subStyle'
+      style: number;       // rune tree id (e.g. 8100 = Domination)
+      selections: Array<{ perk: number; var1: number; var2: number; var3: number }>;
     }>;
   };
   teamPosition?: string;
+  individualPosition?: string;
   visionScore?: number;
+  wardsPlaced?: number;
+  wardsKilled?: number;
+  visionWardsBoughtInGame?: number;
+  totalDamageDealtToChampions?: number;
+  totalDamageTaken?: number;
+  damageSelfMitigated?: number;
+  totalHeal?: number;
+  totalHealsOnTeammates?: number;
+  damageDealtToObjectives?: number;
+  damageDealtToTurrets?: number;
+  turretKills?: number;
+  inhibitorKills?: number;
+  firstBloodKill?: boolean;
+  firstBloodAssist?: boolean;
+  firstTowerKill?: boolean;
+  firstTowerAssist?: boolean;
+  largestMultiKill?: number;
+  pentaKills?: number;
+  quadraKills?: number;
+  tripleKills?: number;
+  doubleKills?: number;
+  longestTimeSpentLiving?: number;
+  timeCCingOthers?: number;
+  totalTimeCCDealt?: number;
+  goldSpent?: number;
+  challenges?: Record<string, number>;
+}
+
+export interface MatchTeam {
+  teamId: number;
+  win: boolean;
+  bans?: Array<{ championId: number; pickTurn: number }>;
+  objectives?: {
+    baron?: { first: boolean; kills: number };
+    dragon?: { first: boolean; kills: number };
+    champion?: { first: boolean; kills: number };
+    tower?: { first: boolean; kills: number };
+    inhibitor?: { first: boolean; kills: number };
+    riftHerald?: { first: boolean; kills: number };
+    horde?: { first: boolean; kills: number };   // void grubs
+  };
 }
 
 export interface Match {
@@ -219,8 +292,11 @@ export interface Match {
     gameEndTimestamp?: number;
     gameMode: string;
     gameType: string;
+    gameVersion?: string;
     queueId: number;
+    platformId?: string;
     participants: MatchParticipant[];
+    teams?: MatchTeam[];
   };
 }
 
@@ -228,6 +304,99 @@ export async function getMatch(platform: Platform, matchId: string): Promise<Mat
   const host = REGIONAL_HOSTS[regionalFor(platform)];
   const url = `https://${host}/lol/match/v5/matches/${matchId}`;
   return riotFetch<Match>(url, 3_600_000); // matches don't change — cache 1h
+}
+
+// ========================= Match Timeline =========================
+
+export interface TimelineEvent {
+  type: string;
+  timestamp: number;
+  participantId?: number;
+  killerId?: number;
+  victimId?: number;
+  assistingParticipantIds?: number[];
+  position?: { x: number; y: number };
+  itemId?: number;
+  skillSlot?: number;
+  monsterType?: string;
+  monsterSubType?: string;
+  buildingType?: string;
+  laneType?: string;
+  teamId?: number;
+  killType?: string;
+  bounty?: number;
+  shutdownBounty?: number;
+  killerTeamId?: number;
+}
+
+export interface TimelineFrame {
+  timestamp: number;
+  events: TimelineEvent[];
+  participantFrames: Record<string, {
+    participantId: number;
+    currentGold: number;
+    totalGold: number;
+    goldPerSecond: number;
+    level: number;
+    xp: number;
+    minionsKilled: number;
+    jungleMinionsKilled: number;
+    position: { x: number; y: number };
+    championStats?: Record<string, number>;
+    damageStats?: Record<string, number>;
+  }>;
+}
+
+export interface MatchTimeline {
+  metadata: { matchId: string; participants: string[] };
+  info: {
+    frameInterval: number;
+    gameId: number;
+    participants: Array<{ participantId: number; puuid: string }>;
+    frames: TimelineFrame[];
+  };
+}
+
+export async function getMatchTimeline(
+  platform: Platform,
+  matchId: string
+): Promise<MatchTimeline> {
+  const host = REGIONAL_HOSTS[regionalFor(platform)];
+  const url = `https://${host}/lol/match/v5/matches/${matchId}/timeline`;
+  return riotFetch<MatchTimeline>(url, 3_600_000);
+}
+
+// ========================= Champion Mastery =========================
+
+export interface ChampionMastery {
+  puuid: string;
+  championId: number;
+  championLevel: number;
+  championPoints: number;
+  lastPlayTime: number;
+  championPointsSinceLastLevel: number;
+  championPointsUntilNextLevel: number;
+  chestGranted: boolean;
+  tokensEarned: number;
+}
+
+export async function getTopMasteries(
+  platform: Platform,
+  puuid: string,
+  count = 10
+): Promise<ChampionMastery[]> {
+  const host = PLATFORM_HOSTS[platform];
+  const url = `https://${host}/lol/champion-mastery/v4/champion-masteries/by-puuid/${puuid}/top?count=${count}`;
+  return riotFetch<ChampionMastery[]>(url, 300_000);
+}
+
+export async function getMasteryScore(
+  platform: Platform,
+  puuid: string
+): Promise<number> {
+  const host = PLATFORM_HOSTS[platform];
+  const url = `https://${host}/lol/champion-mastery/v4/scores/by-puuid/${puuid}`;
+  return riotFetch<number>(url, 300_000);
 }
 
 // ========================= Live Game =========================

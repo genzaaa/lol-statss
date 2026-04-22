@@ -1,16 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getMatchIds, getMatch, PLATFORM_HOSTS, type Platform } from '@/lib/riot';
-import { batchWithLimit } from '@/lib/batch';
+import {
+  getTopMasteries,
+  getMasteryScore,
+  PLATFORM_HOSTS,
+  type Platform,
+} from '@/lib/riot';
 
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
   const region = searchParams.get('region') as Platform | null;
   const puuid = searchParams.get('puuid');
   const count = parseInt(searchParams.get('count') ?? '10', 10);
-  const start = parseInt(searchParams.get('start') ?? '0', 10);
-  const queueParam = searchParams.get('queue');
-  const queue =
-    queueParam && queueParam !== 'all' ? parseInt(queueParam, 10) : undefined;
 
   if (!region || !puuid) {
     return NextResponse.json(
@@ -18,22 +18,16 @@ export async function GET(req: NextRequest) {
       { status: 400 }
     );
   }
-
   if (!(region in PLATFORM_HOSTS)) {
     return NextResponse.json({ error: 'Invalid region' }, { status: 400 });
   }
 
   try {
-    const ids = await getMatchIds(region, puuid, {
-      start: Math.max(0, start),
-      count: Math.min(count, 20),
-      queue,
-    });
-    // Concurrency-limited to stay safe under Riot rate limits
-    const matches = await batchWithLimit(ids, 5, (id) =>
-      getMatch(region, id).catch(() => null)
-    );
-    return NextResponse.json({ matches: matches.filter(Boolean) });
+    const [masteries, score] = await Promise.all([
+      getTopMasteries(region, puuid, Math.min(count, 20)),
+      getMasteryScore(region, puuid).catch(() => 0),
+    ]);
+    return NextResponse.json({ masteries, score });
   } catch (e: any) {
     const status = e.status ?? 500;
     return NextResponse.json({ error: e.message ?? 'Unknown error' }, { status });
