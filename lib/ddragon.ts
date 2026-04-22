@@ -90,37 +90,63 @@ export async function getChampionMap(): Promise<Record<number, string>> {
 
 // Queue ID → human name. Partial list of common queues.
 export const QUEUE_NAMES: Record<number, string> = {
+  100: 'ARAM (Butcher\'s Bridge)',
   400: 'Normal Draft',
   420: 'Ranked Solo',
   430: 'Normal Blind',
   440: 'Ranked Flex',
   450: 'ARAM',
+  480: 'Swiftplay',
+  490: 'Quickplay',
   700: 'Clash',
+  720: 'ARAM Clash',
   830: 'Co-op vs AI Intro',
   840: 'Co-op vs AI Beginner',
   850: 'Co-op vs AI Intermediate',
+  870: 'Co-op vs AI Intro',
+  880: 'Co-op vs AI Beginner',
+  890: 'Co-op vs AI Intermediate',
   900: 'URF',
   1020: 'One for All',
   1300: 'Nexus Blitz',
   1400: 'Ultimate Spellbook',
   1700: 'Arena',
+  1710: 'Arena',
   1900: 'URF',
+  2400: 'ARAM: Mayhem',
 };
 
 export function queueName(queueId: number): string {
   return QUEUE_NAMES[queueId] ?? `Queue ${queueId}`;
 }
 
-// Exposed set of queues used for filter dropdowns in the UI
-export const QUEUE_FILTER_OPTIONS: Array<{ value: number | 'all'; label: string }> = [
-  { value: 'all', label: 'All queues' },
-  { value: 420, label: 'Ranked Solo' },
-  { value: 440, label: 'Ranked Flex' },
-  { value: 400, label: 'Normal Draft' },
-  { value: 430, label: 'Normal Blind' },
-  { value: 450, label: 'ARAM' },
-  { value: 1700, label: 'Arena' },
+// Exposed set of queues used for filter dropdowns in the UI.
+// Each option may map to multiple queue IDs — e.g. "ARAM" combines the
+// regular Howling Abyss queue (450), ARAM: Mayhem (2400), Butcher's Bridge
+// (100), and ARAM Clash (720) so they all appear under one filter.
+export interface QueueFilterOption {
+  /** Stable string used in URL query params */
+  value: string;
+  /** Human-readable label */
+  label: string;
+  /** Queue IDs covered by this option. Undefined = "all queues" / no filter. */
+  queueIds?: number[];
+}
+
+export const QUEUE_FILTER_OPTIONS: QueueFilterOption[] = [
+  { value: 'all',       label: 'All queues' },
+  { value: 'ranked-solo', label: 'Ranked Solo',  queueIds: [420] },
+  { value: 'ranked-flex', label: 'Ranked Flex',  queueIds: [440] },
+  { value: 'normal',    label: 'Normal',         queueIds: [400, 430, 480, 490] },
+  { value: 'aram',      label: 'ARAM',           queueIds: [450, 2400, 100, 720] },
+  { value: 'arena',     label: 'Arena',          queueIds: [1700, 1710] },
 ];
+
+// Lookup helper for the API route + components
+export function queueIdsForFilter(value: string): number[] | undefined {
+  const opt = QUEUE_FILTER_OPTIONS.find((o) => o.value === value);
+  return opt?.queueIds;
+}
 
 // ========================= Runes (Community Dragon) =========================
 // Community Dragon exposes rune metadata at a stable URL; we resolve rune IDs

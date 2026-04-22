@@ -1,3 +1,4 @@
+import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 import Link from 'next/link';
 import {
@@ -27,6 +28,76 @@ export const revalidate = 60;
 type Props = {
   params: { region: string; riotId: string };
 };
+
+// Parse the URL slug ("GameName-TAG") into { gameName, tagLine } or null.
+function parseSlug(raw: string): { gameName: string; tagLine: string } | null {
+  const decoded = decodeURIComponent(raw);
+  const dashIdx = decoded.lastIndexOf('-');
+  if (dashIdx === -1) return null;
+  return {
+    gameName: decoded.slice(0, dashIdx),
+    tagLine: decoded.slice(dashIdx + 1),
+  };
+}
+
+// ============================================================
+// Open Graph metadata — produces a rich link preview (Discord, Twitter, etc.)
+// ============================================================
+export async function generateMetadata({ params }: Props): Promise<Metadata> {
+  const region = params.region as Platform;
+  if (!(region in PLATFORM_HOSTS)) {
+    return { title: 'Summoner not found' };
+  }
+  const parsed = parseSlug(params.riotId);
+  if (!parsed) return { title: 'Summoner not found' };
+
+  try {
+    // These calls hit the same per-URL cache the page uses, so they cost nothing extra
+    const account = await getAccountByRiotId(region, parsed.gameName, parsed.tagLine);
+    const summoner = await getSummonerByPuuid(region, account.puuid);
+    let ranked: LeagueEntry[] = [];
+    try {
+      ranked = await getRankedByPuuid(region, account.puuid);
+    } catch {
+      // unranked is fine
+    }
+    const version = await getLatestVersion();
+    const solo = ranked.find((r) => r.queueType === 'RANKED_SOLO_5x5');
+
+    const title = `${account.gameName}#${account.tagLine} · ${PLATFORM_LABELS[region]}`;
+    const rankPart = solo
+      ? `${solo.tier} ${solo.rank} · ${solo.leaguePoints} LP · ${winrate(
+          solo.wins,
+          solo.losses
+        )}% WR`
+      : 'Unranked';
+    const description = `Level ${summoner.summonerLevel} · ${rankPart}. View match history, champion mastery, and live game.`;
+
+    const iconUrl = profileIconUrl(version, summoner.profileIconId);
+
+    return {
+      title: `${title} — LoL Stats`,
+      description,
+      openGraph: {
+        title,
+        description,
+        type: 'profile',
+        images: [{ url: iconUrl, width: 256, height: 256, alt: account.gameName }],
+      },
+      twitter: {
+        card: 'summary',
+        title,
+        description,
+        images: [iconUrl],
+      },
+    };
+  } catch {
+    return {
+      title: `${parsed.gameName}#${parsed.tagLine} — LoL Stats`,
+      description: 'League of Legends summoner profile.',
+    };
+  }
+}
 
 export default async function SummonerPage({ params }: Props) {
   const region = params.region as Platform;
