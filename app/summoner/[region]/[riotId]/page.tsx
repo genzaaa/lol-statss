@@ -1,0 +1,227 @@
+import { notFound } from 'next/navigation';
+import Link from 'next/link';
+import {
+  getAccountByRiotId,
+  getSummonerByPuuid,
+  getRankedBySummonerId,
+  getMatchIds,
+  getMatch,
+  getCurrentGame,
+  PLATFORM_HOSTS,
+  PLATFORM_LABELS,
+  type Platform,
+} from '@/lib/riot';
+import { getLatestVersion, profileIconUrl, getChampionMap } from '@/lib/ddragon';
+import { RankedCard } from '@/components/RankedCard';
+import { MatchRow } from '@/components/MatchRow';
+import { LiveGameBanner } from '@/components/LiveGameBanner';
+import { winrate } from '@/lib/format';
+
+// Revalidate the page every 60 seconds
+export const revalidate = 60;
+
+type Props = {
+  params: { region: string; riotId: string };
+};
+
+export default async function SummonerPage({ params }: Props) {
+  const region = params.region as Platform;
+  if (!(region in PLATFORM_HOSTS)) notFound();
+
+  // URL format: GameName-TAG (both URL-encoded)
+  const decoded = decodeURIComponent(params.riotId);
+  const dashIdx = decoded.lastIndexOf('-');
+  if (dashIdx === -1) notFound();
+  const gameName = decoded.slice(0, dashIdx);
+  const tagLine = decoded.slice(dashIdx + 1);
+
+  let account, summoner, ranked, matchIds, version;
+  try {
+    account = await getAccountByRiotId(region, gameName, tagLine);
+    [summoner, ranked, matchIds, version] = await Promise.all([
+      getSummonerByPuuid(region, account.puuid),
+      getRankedBySummonerId(region, account.puuid).catch(() => []), // league-v4 by-puuid fallback handled below
+      getMatchIds(region, account.puuid, 10),
+      getLatestVersion(),
+    ]);
+  } catch (e: any) {
+    return (
+      <ErrorPanel
+        title="Could not load summoner"
+        message={e.message || 'Something went wrong'}
+        region={region}
+      />
+    );
+  }
+
+  // league-v4 uses summonerId — but Riot has been migrating to PUUID variants.
+  // Our lib function uses summonerId; patch it here:
+  if (!ranked || ranked.length === 0) {
+    try {
+      ranked = await getRankedBySummonerId(region, summoner.id);
+    } catch {
+      ranked = [];
+    }
+  }
+
+  // Fetch live game + match details in parallel. Live might 404 (not in game).
+  const [currentGame, matches] = await Promise.all([
+    getCurrentGame(region, account.puuid).catch(() => null),
+    Promise.all(matchIds.map((id) => getMatch(region, id).catch(() => null))),
+  ]);
+
+  const validMatches = matches.filter((m): m is NonNullable<typeof m> => m !== null);
+
+  const solo = ranked.find((r) => r.queueType === 'RANKED_SOLO_5x5');
+  const flex = ranked.find((r) => r.queueType === 'RANKED_FLEX_SR');
+
+  // Aggregate recent-game stats
+  const myGames = validMatches
+    .map((m) => m.info.participants.find((p) => p.puuid === account.puuid))
+    .filter((p): p is NonNullable<typeof p> => !!p);
+  const recentWins = myGames.filter((p) => p.win).length;
+  const recentLosses = myGames.length - recentWins;
+  const recentKDA = myGames.length
+    ? (
+        myGames.reduce((s, p) => s + p.kills + p.assists, 0) /
+        Math.max(1, myGames.reduce((s, p) => s + p.deaths, 0))
+      ).toFixed(2)
+    : '0';
+
+  return (
+    <div className="space-y-6">
+      {/* Profile header */}
+      <div className="bg-panel border border-line rounded-lg p-5 flex items-center gap-4">
+        <div className="relative">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={profileIconUrl(version, summoner.profileIconId)}
+            alt=""
+            className="w-20 h-20 rounded-lg border-2 border-accent/40"
+          />
+          <span className="absolute -bottom-1 left-1/2 -translate-x-1/2 bg-accent text-ink text-[11px] font-bold px-2 py-0.5 rounded-full">
+            {summoner.summonerLevel}
+          </span>
+        </div>
+        <div className="flex-1 min-w-0">
+          <div className="flex items-baseline gap-2 flex-wrap">
+            <h1 className="text-2xl font-bold truncate">{account.gameName}</h1>
+            <span className="text-gray-400 text-lg">#{account.tagLine}</span>
+          </div>
+          <p className="text-xs text-gray-500 mt-1">
+            {PLATFORM_LABELS[region]} · Level {summoner.summonerLevel}
+          </p>
+        </div>
+        <Link
+          href="/"
+          className="text-xs text-gray-400 hover:text-accent transition-colors border border-line rounded-md px-3 py-1.5"
+        >
+          ← New search
+        </Link>
+      </div>
+
+      {/* Live game banner (if in game) */}
+      {currentGame && (
+        <LiveGameBanner game={currentGame} puuid={account.puuid} version={version} />
+      )}
+
+      {/* Ranked cards + recent perf */}
+      <div className="grid md:grid-cols-3 gap-3">
+        <RankedCard entry={solo} label="Ranked Solo/Duo" />
+        <RankedCard entry={flex} label="Ranked Flex" />
+        <div className="bg-panel border border-line rounded-lg p-4">
+          <p className="text-xs text-gray-500 uppercase tracking-wider mb-2">Last 10 Games</p>
+          {myGames.length === 0 ? (
+            <p className="text-gray-400 text-sm">No recent games</p>
+          ) : (
+            <>
+              <div className="flex items-center gap-3">
+                <div className="relative w-14 h-14">
+                  <svg viewBox="0 0 36 36" className="w-14 h-14 -rotate-90">
+                    <circle
+                      cx="18"
+                      cy="18"
+                      r="15"
+                      fill="none"
+                      stroke="#232b42"
+                      strokeWidth="3"
+                    />
+                    <circle
+                      cx="18"
+                      cy="18"
+                      r="15"
+                      fill="none"
+                      stroke={recentWins >= recentLosses ? '#28c76f' : '#ea5455'}
+                      strokeWidth="3"
+                      strokeDasharray={`${(recentWins / myGames.length) * 94.25} 94.25`}
+                    />
+                  </svg>
+                  <div className="absolute inset-0 flex items-center justify-center text-sm font-bold">
+                    {winrate(recentWins, recentLosses)}%
+                  </div>
+                </div>
+                <div>
+                  <p className="text-sm font-semibold">
+                    <span className="text-win">{recentWins}W</span>{' '}
+                    <span className="text-loss">{recentLosses}L</span>
+                  </p>
+                  <p className="text-xs text-gray-400">{recentKDA} KDA</p>
+                </div>
+              </div>
+            </>
+          )}
+        </div>
+      </div>
+
+      {/* Match history */}
+      <div>
+        <h2 className="text-lg font-semibold mb-3">Match History</h2>
+        {validMatches.length === 0 ? (
+          <div className="bg-panel border border-line rounded-lg p-6 text-center text-gray-500">
+            No recent matches found.
+          </div>
+        ) : (
+          <div className="space-y-2">
+            {validMatches.map((m) => (
+              <MatchRow
+                key={m.metadata.matchId}
+                match={m}
+                puuid={account.puuid}
+                version={version}
+              />
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function ErrorPanel({
+  title,
+  message,
+  region,
+}: {
+  title: string;
+  message: string;
+  region: string;
+}) {
+  const isNotFound = /404/.test(message);
+  return (
+    <div className="max-w-lg mx-auto bg-panel border border-loss/40 rounded-lg p-6 text-center">
+      <h1 className="text-xl font-semibold mb-2">{title}</h1>
+      <p className="text-gray-400 text-sm mb-4">
+        {isNotFound
+          ? "We couldn't find that Riot ID on this region. Check the spelling and region."
+          : message}
+      </p>
+      <p className="text-xs text-gray-500 mb-4">Region: {region}</p>
+      <Link
+        href="/"
+        className="inline-block bg-accent text-ink font-semibold px-5 py-2 rounded-md hover:bg-accent/90 transition-colors"
+      >
+        ← Back to search
+      </Link>
+    </div>
+  );
+}
