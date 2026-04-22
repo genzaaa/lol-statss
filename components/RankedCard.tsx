@@ -1,3 +1,5 @@
+'use client';
+
 import type { LeagueEntry } from '@/lib/riot';
 import { tierColor, tierIconUrl, winrate } from '@/lib/format';
 
