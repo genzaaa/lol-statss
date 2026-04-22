@@ -1,4 +1,4 @@
-import { LeagueEntry } from '@/lib/riot';
+import type { LeagueEntry } from '@/lib/riot';
 import { tierColor, tierIconUrl, winrate } from '@/lib/format';
 
 export function RankedCard({ entry, label }: { entry?: LeagueEntry; label: string }) {

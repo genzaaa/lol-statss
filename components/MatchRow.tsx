@@ -1,4 +1,4 @@
-import { Match, MatchParticipant } from '@/lib/riot';
+import type { Match, MatchParticipant } from '@/lib/riot';
 import { champIconUrl, itemIconUrl, summonerSpellIconUrl, queueName } from '@/lib/ddragon';
 import { formatDuration, timeAgo, kda } from '@/lib/format';
 

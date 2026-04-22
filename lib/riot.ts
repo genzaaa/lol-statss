@@ -1,54 +1,19 @@
 // Riot API client — all server-side calls go through here.
 // The API key is read from process.env.RIOT_API_KEY and is NEVER exposed to the client.
+import 'server-only';
+
+import {
+  PLATFORM_HOSTS,
+  REGIONAL_HOSTS,
+  regionalFor,
+  PLATFORM_LABELS,
+  type Platform,
+} from './regions';
+
+export { PLATFORM_HOSTS, REGIONAL_HOSTS, regionalFor, PLATFORM_LABELS };
+export type { Platform };
 
 const KEY = process.env.RIOT_API_KEY;
-
-// Platform routing values (specific regions) — used for summoner/league/spectator
-export const PLATFORM_HOSTS = {
-  na1: 'na1.api.riotgames.com',
-  euw1: 'euw1.api.riotgames.com',
-  eun1: 'eun1.api.riotgames.com',
-  kr: 'kr.api.riotgames.com',
-  br1: 'br1.api.riotgames.com',
-  la1: 'la1.api.riotgames.com',
-  la2: 'la2.api.riotgames.com',
-  jp1: 'jp1.api.riotgames.com',
-  oc1: 'oc1.api.riotgames.com',
-  tr1: 'tr1.api.riotgames.com',
-  ru: 'ru.api.riotgames.com',
-} as const;
-
-// Regional routing values (continents) — used for account/match endpoints
-export const REGIONAL_HOSTS = {
-  americas: 'americas.api.riotgames.com',
-  europe: 'europe.api.riotgames.com',
-  asia: 'asia.api.riotgames.com',
-  sea: 'sea.api.riotgames.com',
-} as const;
-
-export type Platform = keyof typeof PLATFORM_HOSTS;
-
-// Map platform → regional cluster
-export function regionalFor(platform: Platform): keyof typeof REGIONAL_HOSTS {
-  if (['na1', 'br1', 'la1', 'la2'].includes(platform)) return 'americas';
-  if (['euw1', 'eun1', 'tr1', 'ru'].includes(platform)) return 'europe';
-  if (['kr', 'jp1'].includes(platform)) return 'asia';
-  return 'sea'; // oc1
-}
-
-export const PLATFORM_LABELS: Record<Platform, string> = {
-  na1: 'NA',
-  euw1: 'EUW',
-  eun1: 'EUNE',
-  kr: 'KR',
-  br1: 'BR',
-  la1: 'LAN',
-  la2: 'LAS',
-  jp1: 'JP',
-  oc1: 'OCE',
-  tr1: 'TR',
-  ru: 'RU',
-};
 
 // Simple in-memory cache with TTL. Good enough for a small project.
 // On Vercel this resets on cold starts, which naturally keeps data fresh.
@@ -112,6 +77,25 @@ export async function getAccountByRiotId(
     gameName
   )}/${encodeURIComponent(tagLine)}`;
   return riotFetch<RiotAccount>(url, 300_000); // 5 min
+}
+
+export async function getAccountByPuuid(
+  platform: Platform,
+  puuid: string
+): Promise<RiotAccount> {
+  const host = REGIONAL_HOSTS[regionalFor(platform)];
+  const url = `https://${host}/riot/account/v1/accounts/by-puuid/${puuid}`;
+  // Cache names aggressively — they rarely change
+  return riotFetch<RiotAccount>(url, 24 * 60 * 60 * 1000);
+}
+
+export async function getSummonerById(
+  platform: Platform,
+  summonerId: string
+): Promise<Summoner> {
+  const host = PLATFORM_HOSTS[platform];
+  const url = `https://${host}/lol/summoner/v4/summoners/${summonerId}`;
+  return riotFetch<Summoner>(url, 24 * 60 * 60 * 1000);
 }
 
 export async function getSummonerByPuuid(

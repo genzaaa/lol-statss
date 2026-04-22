@@ -2,7 +2,7 @@
 
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
-import { PLATFORM_LABELS } from '@/lib/riot';
+import { PLATFORM_LABELS } from '@/lib/regions';
 
 const REGIONS = Object.keys(PLATFORM_LABELS) as Array<keyof typeof PLATFORM_LABELS>;
 

@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { CurrentGame } from '@/lib/riot';
+import type { CurrentGame } from '@/lib/riot';
 import { champIconUrl, summonerSpellIconUrl, queueName, getChampionMap } from '@/lib/ddragon';
 import { formatDuration } from '@/lib/format';
 

@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { PLATFORM_LABELS, type Platform } from '@/lib/riot';
+import { PLATFORM_LABELS, type Platform } from '@/lib/regions';
 import { tierIconUrl, winrate } from '@/lib/format';
 
 const REGIONS = Object.keys(PLATFORM_LABELS) as Platform[];
@@ -14,6 +14,8 @@ const QUEUES = [
 interface Entry {
   summonerId?: string;
   puuid?: string;
+  gameName?: string | null;
+  tagLine?: string | null;
   leaguePoints: number;
   wins: number;
   losses: number;
@@ -89,8 +91,30 @@ export default function LeaderboardPage() {
       </div>
 
       {loading ? (
-        <div className="bg-panel border border-line rounded-lg p-8 text-center text-gray-500">
-          Loading leaderboard…
+        <div className="bg-panel border border-line rounded-lg p-8 text-center">
+          <div className="inline-flex items-center gap-3 text-gray-400">
+            <svg
+              className="animate-spin h-5 w-5 text-accent"
+              xmlns="http://www.w3.org/2000/svg"
+              fill="none"
+              viewBox="0 0 24 24"
+            >
+              <circle
+                className="opacity-25"
+                cx="12"
+                cy="12"
+                r="10"
+                stroke="currentColor"
+                strokeWidth="4"
+              />
+              <path
+                className="opacity-75"
+                fill="currentColor"
+                d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"
+              />
+            </svg>
+            <span>Loading leaderboard… (resolving 50 player names)</span>
+          </div>
         </div>
       ) : error ? (
         <div className="bg-panel border border-loss/40 rounded-lg p-6 text-center">
@@ -98,7 +122,7 @@ export default function LeaderboardPage() {
         </div>
       ) : (
         <div className="bg-panel border border-line rounded-lg overflow-hidden">
-          <div className="grid grid-cols-[auto_1fr_auto_auto_auto] md:grid-cols-[60px_1fr_100px_120px_80px] gap-3 px-4 py-2 text-xs uppercase tracking-wider text-gray-500 border-b border-line">
+          <div className="grid grid-cols-[40px_1fr_auto_auto_auto] md:grid-cols-[60px_1fr_100px_120px_80px] gap-3 px-4 py-2 text-xs uppercase tracking-wider text-gray-500 border-b border-line">
             <span>#</span>
             <span>Summoner</span>
             <span className="text-right">LP</span>
@@ -107,12 +131,44 @@ export default function LeaderboardPage() {
           </div>
           {entries.map((e, i) => {
             const wr = winrate(e.wins, e.losses);
-            const id = e.summonerId || e.puuid || '';
-            const displayId = id ? `${id.slice(0, 8)}…` : `Player #${i + 1}`;
+            const hasName = e.gameName && e.tagLine;
+
+            const href =
+              hasName && e.gameName && e.tagLine
+                ? `/summoner/${region}/${encodeURIComponent(e.gameName)}-${encodeURIComponent(e.tagLine)}`
+                : null;
+
+            const nameElement = (
+              <div className="flex items-center gap-2 min-w-0">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={tierIconUrl('CHALLENGER')}
+                  alt=""
+                  className="w-6 h-6"
+                  onError={(ev) =>
+                    ((ev.currentTarget as HTMLImageElement).style.display = 'none')
+                  }
+                />
+                <span className="truncate font-medium">
+                  {hasName ? (
+                    <>
+                      {e.gameName}
+                      <span className="text-gray-500">#{e.tagLine}</span>
+                    </>
+                  ) : e.puuid ? (
+                    `${e.puuid.slice(0, 8)}…`
+                  ) : (
+                    `Player #${i + 1}`
+                  )}
+                  {e.hotStreak && <span className="ml-1 text-orange-400">🔥</span>}
+                </span>
+              </div>
+            );
+
             return (
               <div
-                key={id || i}
-                className="grid grid-cols-[auto_1fr_auto_auto_auto] md:grid-cols-[60px_1fr_100px_120px_80px] gap-3 px-4 py-3 text-sm items-center border-b border-line/50 last:border-b-0 hover:bg-panel2/40 transition-colors"
+                key={(e.puuid || e.summonerId || '') + i}
+                className="grid grid-cols-[40px_1fr_auto_auto_auto] md:grid-cols-[60px_1fr_100px_120px_80px] gap-3 px-4 py-3 text-sm items-center border-b border-line/50 last:border-b-0 hover:bg-panel2/40 transition-colors"
               >
                 <span
                   className={`font-bold ${
@@ -127,19 +183,13 @@ export default function LeaderboardPage() {
                 >
                   {i + 1}
                 </span>
-                <div className="flex items-center gap-2 min-w-0">
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img
-                    src={tierIconUrl('CHALLENGER')}
-                    alt=""
-                    className="w-6 h-6"
-                    onError={(ev) => ((ev.currentTarget as HTMLImageElement).style.display = 'none')}
-                  />
-                  <span className="truncate font-medium">
-                    {displayId}
-                    {e.hotStreak && <span className="ml-1 text-orange-400">🔥</span>}
-                  </span>
-                </div>
+                {href ? (
+                  <Link href={href} className="min-w-0 hover:text-accent transition-colors">
+                    {nameElement}
+                  </Link>
+                ) : (
+                  nameElement
+                )}
                 <span className="text-right font-mono text-accent">
                   {e.leaguePoints.toLocaleString()}
                 </span>
@@ -161,11 +211,8 @@ export default function LeaderboardPage() {
       )}
 
       <p className="text-xs text-gray-500 text-center">
-        Note: Riot's leaderboard endpoint returns summoner IDs only. Full player names require
-        additional lookups per player (rate-limited).{' '}
-        <Link href="/" className="text-accent hover:underline">
-          Search a specific player →
-        </Link>
+        Click any name to view their full profile. Names are cached for 24h — switching
+        regions/queues after first load will be much faster.
       </p>
     </div>
   );
