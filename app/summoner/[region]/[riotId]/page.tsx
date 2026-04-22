@@ -19,6 +19,7 @@ import { batchWithLimit } from '@/lib/batch';
 import { RankedCard } from '@/components/RankedCard';
 import { MatchList } from '@/components/MatchList';
 import { MasteryPanel } from '@/components/MasteryPanel';
+import { ChampionSummary } from '@/components/ChampionSummary';
 import { LiveGameBanner } from '@/components/LiveGameBanner';
 import { winrate } from '@/lib/format';
 
@@ -207,7 +208,12 @@ export default async function SummonerPage({ params }: Props) {
 
       {/* Live game banner */}
       {currentGame && (
-        <LiveGameBanner game={currentGame} puuid={account.puuid} version={version} />
+        <LiveGameBanner
+          game={currentGame}
+          puuid={account.puuid}
+          region={region}
+          version={version}
+        />
       )}
 
       {/* Ranked + recent summary */}
@@ -260,6 +266,15 @@ export default async function SummonerPage({ params }: Props) {
 
       {/* Champion mastery */}
       <MasteryPanel region={region} puuid={account.puuid} version={version} />
+
+      {/* Recent champion performance — aggregates the matches we already have */}
+      {validMatches.length > 0 && (
+        <ChampionSummary
+          matches={validMatches}
+          puuid={account.puuid}
+          version={version}
+        />
+      )}
 
       {/* Match history with queue filter + pagination */}
       <MatchList

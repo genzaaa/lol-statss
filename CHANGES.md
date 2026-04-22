@@ -1,69 +1,68 @@
-# Changes — Phase 1 + 1.5 + ARAM Mayhem fix
+# Changes — Phase 1 + 1.5 + ARAM fix + Tier 1 features
 
-This branch contains three layers of changes delivered in sequence.
+This document covers everything stacked on top of `main`, in branch order.
 
 ## Phase 1 — OP.GG feature parity
 
 ### New files
-
-- **`components/MatchDetail.tsx`** — the expanded view that appears when you click a match row. Two-team table with damage-dealt bar, damage-taken bar, CS, vision, items, rune icons. Per-team objectives strip (kills, towers, inhibs, barons, dragons, heralds, grubs). Bans row below.
-- **`components/MasteryPanel.tsx`** — top-10 champion mastery grid with colored level badges (10=gold, 7=diamond-blue, 5=emerald) and total mastery score.
-- **`components/MatchList.tsx`** — client component wrapping match rows. Handles queue filter, Load More pagination, skeleton loaders.
-- **`lib/badges.ts`** — computes post-game badges from match data. MVP/ACE, Pentakill/Quadrakill/Triple Kill, Farm Lord (≥9 CS/min), Damage Dealer (≥35% team damage), Vision God (≥45 vision, 20+ min), Juggernaut (high damage taken ≤4 deaths), Healer (≥10k healing), Objective Slayer, First Blood, Flawless (win, 0 deaths), Tower Crusher, Killer.
-- **`app/api/mastery/route.ts`** — `GET /api/mastery?region&puuid&count` returning `{ masteries, score }`.
+- `components/MatchDetail.tsx` — expanded view when you click a match row. Two-team table with damage-dealt + damage-taken bars, CS, vision, items, rune icons. Per-team objectives strip (kills, towers, inhibs, barons, dragons, heralds, grubs). Bans row.
+- `components/MasteryPanel.tsx` — top-10 champion mastery grid with level-colored badges (10 = gold, 7 = diamond-blue, 5 = emerald) and total mastery score.
+- `components/MatchList.tsx` — client wrapper around match rows. Queue filter, Load More pagination, skeleton loaders.
+- `lib/badges.ts` — post-game badges (MVP/ACE, Pentakill/Quadrakill/Triple, Farm Lord, Damage Dealer, Vision God, Juggernaut, Healer, Objective Slayer, First Blood, Flawless, Tower Crusher, Killer).
+- `app/api/mastery/route.ts` — `GET /api/mastery?region&puuid&count` returning `{ masteries, score }`.
 
 ### Changed
-
-- **`lib/riot.ts`**
-  - Added `getRankedByPuuid()` — current PUUID-based league endpoint
-  - Added `getTopMasteries()`, `getMasteryScore()`
-  - Added `getMatchTimeline()` + timeline types (ready for Phase 2)
-  - Extended `MatchParticipant` + new `MatchTeam` types to cover damage breakdown, objectives, multi-kills, first-blood flags, challenges
-  - Rewrote `getMatchIds()` to accept `{ start, count, queue, type, startTime, endTime }` (back-compat shim kept for old numeric-count signature)
-- **`lib/ddragon.ts`**
-  - Fixed broken `summonerSpellIconUrl()` — old `SPELL_KEYS` had wrong entries that 404'd for most spells
-  - Added `getRuneStyles()`, `runeIconUrl()`, `findRune()` for rune metadata
-  - Added `roleLabel()` / `ROLE_LABELS`
-  - Kept `SPELL_KEYS` as an alias for backward compat
-- **`app/api/matches/route.ts`** — accepts `start` and `queue` params; uses `batchWithLimit(ids, 5, ...)` for safe rate-limit behavior
-- **`app/api/leaderboard/route.ts`** — batch-resolves each entry's PUUID → Riot ID at concurrency 5, populating `gameName`/`tagLine` (fixes the "shows summoner IDs" issue flagged in README)
-- **`app/summoner/[region]/[riotId]/page.tsx`** — uses `getRankedByPuuid` with summoner-ID fallback (fixes PUUID-vs-summonerId bug); wires in `MasteryPanel` and `MatchList`
-- **`components/MatchRow.tsx`** — click-to-expand with badges on collapsed view; renders `<MatchDetail>` when expanded
+- `lib/riot.ts` — added `getRankedByPuuid`, `getTopMasteries`, `getMasteryScore`, `getMatchTimeline`; extended participant/team types; `getMatchIds` accepts `{ start, count, queue, type, startTime, endTime }`.
+- `lib/ddragon.ts` — fixed broken summoner-spell icon URLs; added rune metadata helpers, `roleLabel`.
+- `app/api/matches/route.ts` — `start` + `queue` params; concurrency-limited match detail fetch.
+- `app/api/leaderboard/route.ts` — batch-resolves PUUID → Riot ID (fixes "shows summoner IDs" issue).
+- `app/summoner/[region]/[riotId]/page.tsx` — uses `getRankedByPuuid` with fallback (fixes PUUID-vs-summonerId bug); wires in MasteryPanel + MatchList.
+- `components/MatchRow.tsx` — click-to-expand, badges on collapsed view.
 
 ## Phase 1.5 — Polish
 
 ### New files
-
-- **`app/summoner/[region]/[riotId]/loading.tsx`** — full skeleton shown instantly during navigation. No more blank 2–5 second screen while the server fetches account/summoner/matches.
-- **`components/RecentSearches.tsx`** — pinned recent summoners on the home page from localStorage. × button to remove individual entries, deduplication by region+name, max 6 items. Exports `pushRecentSearch()`, `readRecentSearches()`, `removeRecentSearch()`.
+- `app/summoner/[region]/[riotId]/loading.tsx` — streams full skeleton during navigation. No more blank 2–5 second screen.
+- `components/RecentSearches.tsx` — localStorage-backed pinned recent summoners on home page (max 6, × to remove, deduped).
 
 ### Changed
+- `app/page.tsx` — calls `pushRecentSearch()` on submit, renders `<RecentSearches />`.
+- `app/summoner/[region]/[riotId]/page.tsx` — added `generateMetadata()` for Open Graph rich previews.
+- `components/MatchList.tsx` — queue filter state now persists in URL as `?queue=aram`.
 
-- **`app/page.tsx`** — calls `pushRecentSearch()` on submit, renders `<RecentSearches />` on home page
-- **`app/summoner/[region]/[riotId]/page.tsx`** — added `generateMetadata()` for Open Graph. Discord/Twitter/Reddit previews now show:
-  - Title: `Faker#KR1 · KR`
-  - Description: level + rank + LP + WR
-  - Image: profile icon
-- **`components/MatchList.tsx`** — queue filter state now persists in the URL as `?queue=aram`. `router.replace` (no scroll, no navigation) keeps the back button clean. Can deep-link or share filtered views.
+## ARAM fix (two commits stacked)
 
-## Additional fix — ARAM Mayhem was invisible
+### aram-fix-v2
+Multi-queue filter (ARAM groups queues 450 + 100 + 720 + 2400 at the time) was returning empty because Riot's match-v5 `startTime` param has a known bug where it sometimes returns `[]`. Removed `startTime` entirely; multi-queue path now over-fetches up to 40 IDs per queue, merges, sorts newest-first.
 
-**Symptom:** selecting "ARAM" showed old games from months ago, and ARAM: Mayhem matches (launched Oct 2025) were missing entirely.
+### aram-mayhem-acknowledgment
+Per Riot issue #1109 (closed as "working as intended"), ARAM: Mayhem matches deliberately return 403 from match-v5. Removed queue 2400 from the ARAM filter list (it was producing guaranteed-failing requests) and added a small inline note under the filter when ARAM is selected, explaining the limitation.
 
-**Cause:** Riot assigns separate queue IDs per ARAM variant:
-- `450` — Howling Abyss ARAM (the classic)
-- `2400` — ARAM: Mayhem (added Oct 22, 2025)
-- `100` — Butcher's Bridge ARAM (event variant)
-- `720` — ARAM Clash
+## Tier 1 — Discovery and UX features (this batch)
 
-The filter was passing `queue=450` to Riot's match-v5 endpoint, which does NOT support multiple `queue=` params in one request — so Mayhem games were filtered out entirely, and recent matches from Mayhem-heavy players got replaced by ancient 450-only history.
+### New files
+- **`lib/pros.ts`** — curated list of 19 famous pro/streamer accounts across KR / LEC / LCS, grouped by region.
+- **`components/FeaturedPros.tsx`** — server-rendered "Featured pros" section on home page. Pure static click-through links; no API calls per pro.
+- **`components/ChampionSummary.tsx`** — client-side aggregation of the user's recent matches by champion. Top 7 champs with games, W/L, KDA, CS/min, winrate. Zero extra API calls — reshapes data we already have.
+- **`app/api/scout/route.ts`** — POST endpoint: given a region + up to 10 PUUIDs, returns each one's solo rank + last-10-ranked W/L + top champion. Concurrency-bounded.
+- **`app/compare/page.tsx`** + **`components/CompareSearch.tsx`** — new `/compare` route. Empty state shows an input form; with `?region&a=Name%23TAG&b=Name%23TAG` renders side-by-side profile cards with rank, recent form, top 3 champions, and a "Head to Head" summary with tier-aware scoring.
+- **`components/CommandPalette.tsx`** — global Cmd+K / Ctrl+K (or `/`) modal. Region select, Riot ID input, recent searches as quick-pick buttons. Esc to close. Mounted once in root layout.
 
-**Fix:** queue filter values are now strings (e.g. `'aram'`) mapped to **arrays** of queue IDs.
+### Changed
+- **`components/LiveGameBanner.tsx`** — significantly upgraded. On mount, calls `/api/scout` for all 10 participants in parallel. Each player now shows: rank + LP, hot-streak 🔥 indicator, recent W/L and WR inline. Still renders correctly if scout fails (degrades gracefully).
+- **`app/summoner/[region]/[riotId]/page.tsx`** — passes `region` into `<LiveGameBanner>`; renders `<ChampionSummary>` between Mastery and Match History.
+- **`app/page.tsx`** — imports and renders `<FeaturedPros />` between Recent Searches and the feature cards.
+- **`app/layout.tsx`** — mounts `<CommandPalette />` at the body root; adds Compare link to nav; adds a small ⌘K hint next to the nav links on desktop.
 
-- **`lib/ddragon.ts`** — `QUEUE_FILTER_OPTIONS` restructured. Each option has a `value: string` and optional `queueIds: number[]`. ARAM maps to `[450, 2400, 100, 720]`. Normal groups `[400, 430, 480, 490]` (Draft/Blind/Swiftplay/Quickplay). Arena groups `[1700, 1710]`. New `queueIdsForFilter()` helper.
-- **`app/api/matches/route.ts`** — when a filter maps to multiple queue IDs, fans out one parallel request per ID, merges the results, dedupes, and sorts by extracted numeric match ID (newest first). Then paginates from the merged list.
-- **`lib/ddragon.ts` — `QUEUE_NAMES`** — added all missing queue IDs (2400 "ARAM: Mayhem", 480 "Swiftplay", 490 "Quickplay", 720 "ARAM Clash", 1710 "Arena", 870/880/890 new bot queues, 100 "ARAM (Butcher's Bridge)") so match cards display the correct mode name for each variant.
-- **Plus a 6-month cutoff** is applied whenever any queue filter is set, so ancient games never surface for players who rarely touch that queue. Empty state now says "No ARAM matches in the last 6 months."
+### Head-to-head scoring formula (compare page)
+
+The "who's ahead" comparison uses a fair tier score:
+
+- `IRON=1 → CHALLENGER=9`, with `GRANDMASTER=8.5`
+- Division: `I=0, II=-0.25, III=-0.5, IV=-0.75`
+- LP: `leaguePoints / 1000` added as a fractional bump
+
+So **Master 1500 LP > Challenger 100 LP** (correct, since Master+1500 generally implies higher skill than newly-promoted Challenger). Diamond I beats Platinum I. Within Gold IV, 90 LP beats 80 LP.
 
 ## How to run
 
@@ -73,19 +72,28 @@ npm run dev
 # open http://localhost:3000
 ```
 
+Try:
+- Home page scroll — Recent Searches → Featured Pros
+- Press **⌘K** (or `/`) anywhere to open command palette
+- Visit `/compare`, enter two Riot IDs
+- Visit any summoner profile — see the Champion Summary between mastery and match history
+- Check a live game — each participant now shows their rank + recent form
+
 ## Verification
 
-- All 11 new/changed files pass syntax check (verified with TypeScript's `createSourceFile`)
+- All 11 new/changed files pass syntax check
 - Every `@/lib/*` import cross-checked against exports
-- The multi-queue merge logic was unit-tested with simulated data — IDs come back in correct chronological order across all 4 ARAM variants
-- Full `tsc --noEmit` needs `node_modules` locally; run `npm install && npx tsc --noEmit` to confirm, or just `npm run dev` (Next.js surfaces type errors at compile time)
+- Tier score logic unit-tested in isolation: Diamond > Platinum, LP tiebreaks, Master 1500 > Challenger 100, unranked = 0
+- Multi-queue merge logic was previously verified with simulated data
+- Full `tsc --noEmit` needs `node_modules`; run locally or let `npm run dev` surface errors
 
-## Phase 2 preview
+## Branch structure
 
-With this foundation in place, Phase 2 unlocks:
-- **Pre-game lobby scout** — paste multiple Riot IDs, compare ranks/form side-by-side
-- **Champion detail pages** at `/champion/[name]` — abilities, skins, lore from Data Dragon
-- **Match timeline viewer** — `getMatchTimeline()` is already in place, just needs rendering
-- **Database-backed real tier list** — would need Render Postgres + cron
-
-Nothing in Phase 2 requires a database.
+```
+main
+ └── phase-1                        OP.GG feature parity
+      └── phase-1-5                 Polish + URL state + recent searches
+           └── aram-fix-v2          startTime bug workaround
+                └── aram-mayhem-acknowledgment   Drop queue 2400 + notice
+                     └── tier-1     ← THIS COMMIT
+```

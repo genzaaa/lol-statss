@@ -4,6 +4,7 @@ import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 import { PLATFORM_LABELS, type Platform } from '@/lib/regions';
 import { RecentSearches, pushRecentSearch } from '@/components/RecentSearches';
+import { FeaturedPros } from '@/components/FeaturedPros';
 
 const REGIONS = Object.keys(PLATFORM_LABELS) as Array<keyof typeof PLATFORM_LABELS>;
 
@@ -80,6 +81,8 @@ export default function Home() {
       </div>
 
       <RecentSearches />
+
+      <FeaturedPros />
 
       <div className="grid md:grid-cols-3 gap-4 mt-20">
         <FeatureCard
