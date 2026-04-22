@@ -138,7 +138,12 @@ export const QUEUE_FILTER_OPTIONS: QueueFilterOption[] = [
   { value: 'ranked-solo', label: 'Ranked Solo',  queueIds: [420] },
   { value: 'ranked-flex', label: 'Ranked Flex',  queueIds: [440] },
   { value: 'normal',    label: 'Normal',         queueIds: [400, 430, 480, 490] },
-  { value: 'aram',      label: 'ARAM',           queueIds: [450, 2400, 100, 720] },
+  // Note: ARAM: Mayhem (queue 2400) is deliberately blocked by Riot's match-v5
+  // API — any request for matches in queue 2400 returns 403. See
+  // https://github.com/RiotGames/developer-relations/issues/1109 (closed as
+  // "working as intended"). Every third-party tracker has the same blind
+  // spot. We exclude 2400 here to avoid a pointless failing request.
+  { value: 'aram',      label: 'ARAM',           queueIds: [450, 100, 720] },
   { value: 'arena',     label: 'Arena',          queueIds: [1700, 1710] },
 ];
 
