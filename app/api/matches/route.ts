@@ -8,9 +8,13 @@ import {
 import { batchWithLimit } from '@/lib/batch';
 import { queueIdsForFilter } from '@/lib/ddragon';
 
-// When a specific queue is filtered, restrict to the last ~6 months so we don't
-// surface ancient games for queues the player rarely touches (e.g. ARAM).
-const SIX_MONTHS_SECONDS = 60 * 60 * 24 * 30 * 6;
+// How far back to fetch when a filter is set. Ranked filters use this as a
+// hint (via startTime); multi-queue filters (ARAM/Normal/Arena) intentionally
+// DON'T pass startTime to Riot because that endpoint occasionally returns an
+// empty list when startTime is set, even for active players — see
+// https://github.com/RiotGames/developer-relations/issues/571
+// Instead, for multi-queue filters we over-fetch IDs and trim newest-first.
+const LOOKBACK_FETCH_BUDGET = 40;
 
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
@@ -31,46 +35,49 @@ export async function GET(req: NextRequest) {
   }
 
   // Resolve the filter value (e.g. "aram") to a list of queue IDs (e.g. [450, 2400, 100, 720]).
-  // `undefined` means "no filter" (covers the "all" option).
+  // `undefined` means "no filter" (the "all" option).
   const queueIds = queueIdsForFilter(queueParam);
-  const isFiltered = queueIds !== undefined;
-  const startTime = isFiltered
-    ? Math.floor(Date.now() / 1000) - SIX_MONTHS_SECONDS
-    : undefined;
 
   try {
     let ids: string[];
 
     if (!queueIds || queueIds.length === 0) {
-      // No filter — single request
+      // No filter — single request, no startTime
       ids = await getMatchIds(region, puuid, { start, count });
     } else if (queueIds.length === 1) {
-      // Single queue ID — direct request
+      // Single queue ID — direct request. No startTime; just return newest N.
       ids = await getMatchIds(region, puuid, {
         start,
         count,
         queue: queueIds[0],
-        startTime,
       });
     } else {
       // Multiple queue IDs — Riot's API doesn't accept multiple queue= params,
-      // so fan out: one request per queue ID, then merge.
-      // We over-fetch (start+count from each) so a player who plays heavily
-      // on one variant doesn't drown out the others.
+      // so fan out one request per queue ID and merge.
+      //
+      // Over-fetch up to LOOKBACK_FETCH_BUDGET per queue so a recent Mayhem
+      // match isn't missed because the player has 30 regular ARAM games queued
+      // ahead of it. After merging we slice to the requested page.
+      //
+      // We deliberately DO NOT pass startTime here — see top-of-file note.
+      const perQueueBudget = Math.max(count, Math.min(LOOKBACK_FETCH_BUDGET, start + count * 2));
       const perQueueResults = await Promise.all(
         queueIds.map((q) =>
           getMatchIds(region, puuid, {
             start: 0,
-            count: start + count,
+            count: perQueueBudget,
             queue: q,
-            startTime,
-          }).catch(() => [] as string[])
+          }).catch((e) => {
+            // Don't let a single failing queue blank the whole result, but do
+            // surface the error in server logs so we can diagnose 429s / 5xxs.
+            console.warn(`[matches] queue=${q} fetch failed:`, e?.message ?? e);
+            return [] as string[];
+          })
         )
       );
 
-      // Match IDs look like "NA1_8123456789" — the trailing decimal number is
-      // an auto-incrementing counter, so larger = newer. We extract and sort
-      // numerically rather than lexicographically to be safe.
+      // Match IDs look like "NA1_8123456789" — trailing decimal is an auto-
+      // incrementing counter, so larger = newer. Extract & sort numerically.
       const merged = Array.from(new Set(perQueueResults.flat()));
       const numericPart = (id: string): number => {
         const m = id.match(/_(\d+)$/);
@@ -80,7 +87,7 @@ export async function GET(req: NextRequest) {
       ids = merged.slice(start, start + count);
     }
 
-    // Concurrency-limited match detail fetch
+    // Concurrency-limited match detail fetch (5 parallel requests)
     const matches = await batchWithLimit(ids, 5, (id) =>
       getMatch(region, id).catch(() => null)
     );

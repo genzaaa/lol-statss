@@ -156,7 +156,7 @@ export function MatchList({
         <div className="bg-panel border border-line rounded-lg p-6 text-center text-gray-500 text-sm">
           {queue === 'all'
             ? 'No matches found.'
-            : `No ${queueLabel} matches in the last 6 months.`}
+            : `No ${queueLabel} matches found for this player.`}
         </div>
       ) : (
         <div className="space-y-2">
