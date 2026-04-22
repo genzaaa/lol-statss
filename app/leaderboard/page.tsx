@@ -12,7 +12,8 @@ const QUEUES = [
 ];
 
 interface Entry {
-  summonerId: string;
+  summonerId?: string;
+  puuid?: string;
   leaguePoints: number;
   wins: number;
   losses: number;
@@ -106,9 +107,11 @@ export default function LeaderboardPage() {
           </div>
           {entries.map((e, i) => {
             const wr = winrate(e.wins, e.losses);
+            const id = e.summonerId || e.puuid || '';
+            const displayId = id ? `${id.slice(0, 8)}…` : `Player #${i + 1}`;
             return (
               <div
-                key={e.summonerId}
+                key={id || i}
                 className="grid grid-cols-[auto_1fr_auto_auto_auto] md:grid-cols-[60px_1fr_100px_120px_80px] gap-3 px-4 py-3 text-sm items-center border-b border-line/50 last:border-b-0 hover:bg-panel2/40 transition-colors"
               >
                 <span
@@ -133,7 +136,7 @@ export default function LeaderboardPage() {
                     onError={(ev) => ((ev.currentTarget as HTMLImageElement).style.display = 'none')}
                   />
                   <span className="truncate font-medium">
-                    {e.summonerId.slice(0, 8)}…
+                    {displayId}
                     {e.hotStreak && <span className="ml-1 text-orange-400">🔥</span>}
                   </span>
                 </div>
