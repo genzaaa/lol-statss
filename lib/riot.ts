@@ -180,6 +180,8 @@ export interface GetMatchIdsOptions {
   count?: number;
   queue?: number; // queue id filter (e.g. 420 for ranked solo)
   type?: 'ranked' | 'normal' | 'tourney' | 'tutorial';
+  startTime?: number; // epoch SECONDS — only return matches after this time
+  endTime?: number;   // epoch SECONDS
 }
 
 export async function getMatchIds(
@@ -190,7 +192,7 @@ export async function getMatchIds(
   // Back-compat: old signature was (platform, puuid, count: number)
   const opts: GetMatchIdsOptions =
     typeof options === 'number' ? { count: options } : options;
-  const { start = 0, count = 10, queue, type } = opts;
+  const { start = 0, count = 10, queue, type, startTime, endTime } = opts;
 
   const host = REGIONAL_HOSTS[regionalFor(platform)];
   const params = new URLSearchParams({
@@ -199,6 +201,8 @@ export async function getMatchIds(
   });
   if (queue !== undefined) params.set('queue', String(queue));
   if (type) params.set('type', type);
+  if (startTime !== undefined) params.set('startTime', String(startTime));
+  if (endTime !== undefined) params.set('endTime', String(endTime));
 
   const url = `https://${host}/lol/match/v5/matches/by-puuid/${puuid}/ids?${params}`;
   return riotFetch<string[]>(url, 60_000);
