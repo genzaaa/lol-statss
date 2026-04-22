@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import './globals.css';
+import { CommandPalette } from '@/components/CommandPalette';
 
 export const metadata: Metadata = {
   title: 'LoL Stats',
@@ -25,9 +26,16 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
               <Link href="/" className="hover:text-accent transition-colors">
                 Search
               </Link>
+              <Link href="/compare" className="hover:text-accent transition-colors">
+                Compare
+              </Link>
               <Link href="/leaderboard" className="hover:text-accent transition-colors">
                 Leaderboard
               </Link>
+              <span className="hidden sm:inline-flex items-center gap-1 text-[10px] text-gray-500 border border-line rounded-md px-2 py-1">
+                Quick search:
+                <kbd className="bg-panel2 rounded px-1 font-mono">⌘K</kbd>
+              </span>
             </div>
           </div>
         </nav>
@@ -42,6 +50,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             Inc.
           </p>
         </footer>
+        <CommandPalette />
       </body>
     </html>
   );
