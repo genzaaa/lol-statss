@@ -35,12 +35,20 @@ export default async function SummonerPage({ params }: Props) {
   const gameName = decoded.slice(0, dashIdx);
   const tagLine = decoded.slice(dashIdx + 1);
 
-  let account, summoner, ranked, matchIds, version;
+  // Fetch account first — everything else depends on it
+  let account: Awaited<ReturnType<typeof getAccountByRiotId>>;
+  let summoner: Awaited<ReturnType<typeof getSummonerByPuuid>>;
+  let ranked: Awaited<ReturnType<typeof getRankedBySummonerId>>;
+  let matchIds: string[];
+  let version: string;
+
   try {
     account = await getAccountByRiotId(region, gameName, tagLine);
     [summoner, ranked, matchIds, version] = await Promise.all([
       getSummonerByPuuid(region, account.puuid),
-      getRankedBySummonerId(region, account.puuid).catch(() => []), // league-v4 by-puuid fallback handled below
+      getRankedBySummonerId(region, account.puuid).catch(
+        () => [] as Awaited<ReturnType<typeof getRankedBySummonerId>>
+      ),
       getMatchIds(region, account.puuid, 10),
       getLatestVersion(),
     ]);
