@@ -3,6 +3,7 @@ import Link from 'next/link';
 import {
   getAccountByRiotId,
   getSummonerByPuuid,
+  getRankedByPuuid,
   getRankedBySummonerId,
   getMatchIds,
   getMatch,
@@ -10,10 +11,13 @@ import {
   PLATFORM_HOSTS,
   PLATFORM_LABELS,
   type Platform,
+  type LeagueEntry,
 } from '@/lib/riot';
-import { getLatestVersion, profileIconUrl, getChampionMap } from '@/lib/ddragon';
+import { getLatestVersion, profileIconUrl } from '@/lib/ddragon';
+import { batchWithLimit } from '@/lib/batch';
 import { RankedCard } from '@/components/RankedCard';
-import { MatchRow } from '@/components/MatchRow';
+import { MatchList } from '@/components/MatchList';
+import { MasteryPanel } from '@/components/MasteryPanel';
 import { LiveGameBanner } from '@/components/LiveGameBanner';
 import { winrate } from '@/lib/format';
 
@@ -35,20 +39,18 @@ export default async function SummonerPage({ params }: Props) {
   const gameName = decoded.slice(0, dashIdx);
   const tagLine = decoded.slice(dashIdx + 1);
 
-  // Fetch account first — everything else depends on it
   let account: Awaited<ReturnType<typeof getAccountByRiotId>>;
   let summoner: Awaited<ReturnType<typeof getSummonerByPuuid>>;
-  let ranked: Awaited<ReturnType<typeof getRankedBySummonerId>>;
-  let matchIds: string[];
   let version: string;
+  let matchIds: string[];
 
   try {
     account = await getAccountByRiotId(region, gameName, tagLine);
-    [summoner, ranked, matchIds, version] = await Promise.all([
+
+    // Fetch everything else in parallel. Ranked is split out because we try
+    // the PUUID endpoint first and fall back to summoner-id if it fails.
+    [summoner, matchIds, version] = await Promise.all([
       getSummonerByPuuid(region, account.puuid),
-      getRankedBySummonerId(region, account.puuid).catch(
-        () => [] as Awaited<ReturnType<typeof getRankedBySummonerId>>
-      ),
       getMatchIds(region, account.puuid, 10),
       getLatestVersion(),
     ]);
@@ -62,9 +64,11 @@ export default async function SummonerPage({ params }: Props) {
     );
   }
 
-  // league-v4 uses summonerId — but Riot has been migrating to PUUID variants.
-  // Our lib function uses summonerId; patch it here:
-  if (!ranked || ranked.length === 0) {
+  // Resolve ranked info — PUUID endpoint is the current one, fall back otherwise
+  let ranked: LeagueEntry[];
+  try {
+    ranked = await getRankedByPuuid(region, account.puuid);
+  } catch {
     try {
       ranked = await getRankedBySummonerId(region, summoner.id);
     } catch {
@@ -72,13 +76,15 @@ export default async function SummonerPage({ params }: Props) {
     }
   }
 
-  // Fetch live game + match details in parallel. Live might 404 (not in game).
-  const [currentGame, matches] = await Promise.all([
+  // Live game + match details in parallel
+  const [currentGame, initialMatches] = await Promise.all([
     getCurrentGame(region, account.puuid).catch(() => null),
-    Promise.all(matchIds.map((id) => getMatch(region, id).catch(() => null))),
+    batchWithLimit(matchIds, 5, (id) => getMatch(region, id).catch(() => null)),
   ]);
 
-  const validMatches = matches.filter((m): m is NonNullable<typeof m> => m !== null);
+  const validMatches = initialMatches.filter(
+    (m): m is NonNullable<typeof m> => m !== null
+  );
 
   const solo = ranked.find((r) => r.queueType === 'RANKED_SOLO_5x5');
   const flex = ranked.find((r) => r.queueType === 'RANKED_FLEX_SR');
@@ -128,79 +134,70 @@ export default async function SummonerPage({ params }: Props) {
         </Link>
       </div>
 
-      {/* Live game banner (if in game) */}
+      {/* Live game banner */}
       {currentGame && (
         <LiveGameBanner game={currentGame} puuid={account.puuid} version={version} />
       )}
 
-      {/* Ranked cards + recent perf */}
+      {/* Ranked + recent summary */}
       <div className="grid md:grid-cols-3 gap-3">
         <RankedCard entry={solo} label="Ranked Solo/Duo" />
         <RankedCard entry={flex} label="Ranked Flex" />
         <div className="bg-panel border border-line rounded-lg p-4">
-          <p className="text-xs text-gray-500 uppercase tracking-wider mb-2">Last 10 Games</p>
+          <p className="text-xs text-gray-500 uppercase tracking-wider mb-2">
+            Last {myGames.length || 10} Games
+          </p>
           {myGames.length === 0 ? (
             <p className="text-gray-400 text-sm">No recent games</p>
           ) : (
-            <>
-              <div className="flex items-center gap-3">
-                <div className="relative w-14 h-14">
-                  <svg viewBox="0 0 36 36" className="w-14 h-14 -rotate-90">
-                    <circle
-                      cx="18"
-                      cy="18"
-                      r="15"
-                      fill="none"
-                      stroke="#232b42"
-                      strokeWidth="3"
-                    />
-                    <circle
-                      cx="18"
-                      cy="18"
-                      r="15"
-                      fill="none"
-                      stroke={recentWins >= recentLosses ? '#28c76f' : '#ea5455'}
-                      strokeWidth="3"
-                      strokeDasharray={`${(recentWins / myGames.length) * 94.25} 94.25`}
-                    />
-                  </svg>
-                  <div className="absolute inset-0 flex items-center justify-center text-sm font-bold">
-                    {winrate(recentWins, recentLosses)}%
-                  </div>
-                </div>
-                <div>
-                  <p className="text-sm font-semibold">
-                    <span className="text-win">{recentWins}W</span>{' '}
-                    <span className="text-loss">{recentLosses}L</span>
-                  </p>
-                  <p className="text-xs text-gray-400">{recentKDA} KDA</p>
+            <div className="flex items-center gap-3">
+              <div className="relative w-14 h-14">
+                <svg viewBox="0 0 36 36" className="w-14 h-14 -rotate-90">
+                  <circle
+                    cx="18"
+                    cy="18"
+                    r="15"
+                    fill="none"
+                    stroke="#232b42"
+                    strokeWidth="3"
+                  />
+                  <circle
+                    cx="18"
+                    cy="18"
+                    r="15"
+                    fill="none"
+                    stroke={recentWins >= recentLosses ? '#28c76f' : '#ea5455'}
+                    strokeWidth="3"
+                    strokeDasharray={`${(recentWins / myGames.length) * 94.25} 94.25`}
+                  />
+                </svg>
+                <div className="absolute inset-0 flex items-center justify-center text-sm font-bold">
+                  {winrate(recentWins, recentLosses)}%
                 </div>
               </div>
-            </>
+              <div>
+                <p className="text-sm font-semibold">
+                  <span className="text-win">{recentWins}W</span>{' '}
+                  <span className="text-loss">{recentLosses}L</span>
+                </p>
+                <p className="text-xs text-gray-400">{recentKDA} KDA</p>
+              </div>
+            </div>
           )}
         </div>
       </div>
 
-      {/* Match history */}
-      <div>
-        <h2 className="text-lg font-semibold mb-3">Match History</h2>
-        {validMatches.length === 0 ? (
-          <div className="bg-panel border border-line rounded-lg p-6 text-center text-gray-500">
-            No recent matches found.
-          </div>
-        ) : (
-          <div className="space-y-2">
-            {validMatches.map((m) => (
-              <MatchRow
-                key={m.metadata.matchId}
-                match={m}
-                puuid={account.puuid}
-                version={version}
-              />
-            ))}
-          </div>
-        )}
-      </div>
+      {/* Champion mastery */}
+      <MasteryPanel region={region} puuid={account.puuid} version={version} />
+
+      {/* Match history with queue filter + pagination */}
+      <MatchList
+        region={region}
+        puuid={account.puuid}
+        version={version}
+        initialMatches={validMatches}
+        initialQueue="all"
+      />
     </div>
   );
 }

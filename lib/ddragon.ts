@@ -2,6 +2,7 @@
 // No API key needed, so this can run client-side too.
 
 const DDRAGON = 'https://ddragon.leagueoflegends.com';
+const CDRAGON = 'https://raw.communitydragon.org/latest';
 
 // We fetch the current game version once and cache it module-wide.
 let versionPromise: Promise<string> | null = null;
@@ -32,26 +33,38 @@ export function profileIconUrl(version: string, iconId: number): string {
   return `${DDRAGON}/cdn/${version}/img/profileicon/${iconId}.png`;
 }
 
-// Summoner spells — map ID → key name
-// Using CommunityDragon for simpler ID-based lookup
+// Summoner spells — map ID → Data Dragon key.
+// Keeping the old SPELL_KEYS export for backward compatibility but using
+// the official Data Dragon icons which are more reliable.
+const SPELL_KEY_BY_ID: Record<number, string> = {
+  1: 'SummonerBoost',      // Cleanse
+  3: 'SummonerExhaust',
+  4: 'SummonerFlash',
+  6: 'SummonerHaste',      // Ghost
+  7: 'SummonerHeal',
+  11: 'SummonerSmite',
+  12: 'SummonerTeleport',
+  13: 'SummonerMana',      // Clarity
+  14: 'SummonerDot',       // Ignite
+  21: 'SummonerBarrier',
+  30: 'SummonerPoroRecall',
+  31: 'SummonerPoroThrow',
+  32: 'SummonerSnowball',  // ARAM Mark
+  39: 'SummonerSnowURFSnowball_Mark',
+  54: 'Summoner_UltBookPlaceholder',
+  55: 'Summoner_UltBookSmitePlaceholder',
+};
+
 export function summonerSpellIconUrl(spellId: number): string {
-  return `https://raw.communitydragon.org/latest/plugins/rcp-be-lol-game-data/global/default/data/spells/icons2d/summoner_${SPELL_KEYS[spellId] ?? 'flash'}.png`;
+  const key = SPELL_KEY_BY_ID[spellId];
+  if (!key) return '';
+  // Data Dragon stores spell images under img/spell/<Key>.png
+  // We use a fixed recent version path via CommunityDragon which stays updated.
+  return `${CDRAGON}/plugins/rcp-be-lol-game-data/global/default/data/spells/icons2d/${key.toLowerCase()}.png`;
 }
 
-const SPELL_KEYS: Record<number, string> = {
-  1: 'boost',      // Cleanse
-  3: 'exhaust',
-  4: 'flash',
-  6: 'haste',      // Ghost
-  7: 'heal',
-  11: 'smite',
-  12: 'teleport',
-  13: 'mana',      // Clarity
-  14: 'dot',       // Ignite
-  21: 'barrier',
-  32: 'mark',      // ARAM snowball
-  39: 'mark',
-};
+// Legacy alias kept so any existing imports still work
+export const SPELL_KEYS = SPELL_KEY_BY_ID;
 
 // Champion ID → name mapping. Fetched once from Data Dragon.
 let championMapPromise: Promise<Record<number, string>> | null = null;
@@ -96,4 +109,99 @@ export const QUEUE_NAMES: Record<number, string> = {
 
 export function queueName(queueId: number): string {
   return QUEUE_NAMES[queueId] ?? `Queue ${queueId}`;
+}
+
+// Exposed set of queues used for filter dropdowns in the UI
+export const QUEUE_FILTER_OPTIONS: Array<{ value: number | 'all'; label: string }> = [
+  { value: 'all', label: 'All queues' },
+  { value: 420, label: 'Ranked Solo' },
+  { value: 440, label: 'Ranked Flex' },
+  { value: 400, label: 'Normal Draft' },
+  { value: 430, label: 'Normal Blind' },
+  { value: 450, label: 'ARAM' },
+  { value: 1700, label: 'Arena' },
+];
+
+// ========================= Runes (Community Dragon) =========================
+// Community Dragon exposes rune metadata at a stable URL; we resolve rune IDs
+// (which match Data Dragon perk IDs) to icon paths.
+
+export interface RuneStyle {
+  id: number;
+  name: string;
+  icon: string;
+  slots: Array<{ runes: Array<{ id: number; name: string; icon: string }> }>;
+}
+
+let runesPromise: Promise<RuneStyle[]> | null = null;
+
+export async function getRuneStyles(): Promise<RuneStyle[]> {
+  if (!runesPromise) {
+    runesPromise = (async () => {
+      try {
+        const version = await getLatestVersion();
+        const res = await fetch(
+          `${DDRAGON}/cdn/${version}/data/en_US/runesReforged.json`,
+          { next: { revalidate: 86400 } }
+        );
+        const data: RuneStyle[] = await res.json();
+        return data;
+      } catch {
+        return [];
+      }
+    })();
+  }
+  return runesPromise;
+}
+
+// Resolve rune/style icon from ID. Returns empty string if not found.
+export async function runeIconUrl(runeOrStyleId: number): Promise<string> {
+  if (!runeOrStyleId) return '';
+  const styles = await getRuneStyles();
+  for (const style of styles) {
+    if (style.id === runeOrStyleId) {
+      return `${DDRAGON}/cdn/img/${style.icon}`;
+    }
+    for (const slot of style.slots) {
+      for (const rune of slot.runes) {
+        if (rune.id === runeOrStyleId) {
+          return `${DDRAGON}/cdn/img/${rune.icon}`;
+        }
+      }
+    }
+  }
+  return '';
+}
+
+// Find rune metadata by ID
+export async function findRune(
+  runeId: number
+): Promise<{ id: number; name: string; icon: string } | null> {
+  if (!runeId) return null;
+  const styles = await getRuneStyles();
+  for (const style of styles) {
+    if (style.id === runeId) return { id: style.id, name: style.name, icon: style.icon };
+    for (const slot of style.slots) {
+      for (const rune of slot.runes) {
+        if (rune.id === runeId) return rune;
+      }
+    }
+  }
+  return null;
+}
+
+// ========================= Role helpers =========================
+export const ROLE_LABELS: Record<string, string> = {
+  TOP: 'Top',
+  JUNGLE: 'Jungle',
+  MIDDLE: 'Mid',
+  BOTTOM: 'Bot',
+  UTILITY: 'Support',
+  SUPPORT: 'Support',
+  '': '',
+};
+
+export function roleLabel(position?: string): string {
+  if (!position) return '';
+  return ROLE_LABELS[position.toUpperCase()] ?? position;
 }
