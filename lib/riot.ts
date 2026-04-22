@@ -156,7 +156,8 @@ export interface LeagueList {
   name: string;
   queue: string;
   entries: Array<{
-    summonerId: string;
+    summonerId?: string;
+    puuid?: string;
     leaguePoints: number;
     wins: number;
     losses: number;
