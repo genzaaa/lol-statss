@@ -139,6 +139,14 @@ export function MatchList({
         </select>
       </div>
 
+      {queue === 'aram' && (
+        <p className="mb-3 text-xs text-gray-500 bg-panel/40 border border-line rounded-md px-3 py-2">
+          Note: <span className="text-gray-400">ARAM: Mayhem</span> matches aren't shown here.
+          Riot's API doesn't return data for that mode — every third-party
+          tracker has the same limitation.
+        </p>
+      )}
+
       {loading ? (
         <div className="space-y-2">
           {Array.from({ length: 4 }).map((_, i) => (
