@@ -236,3 +236,122 @@ export function roleLabel(position?: string): string {
   if (!position) return '';
   return ROLE_LABELS[position.toUpperCase()] ?? position;
 }
+
+// ========================= Champions (full list + detail) =========================
+// Data Dragon exposes two relevant files:
+//   champion.json — a compact index of ALL champions (id, name, title, tags, basic stats)
+//   champion/<Id>.json — full detail for one champion including abilities, spell costs, etc.
+//
+// Both are public static JSON, no API key needed, and they cache aggressively.
+
+export interface ChampionSummary {
+  id: string;        // e.g. "Aatrox" — stable key used in URLs and image paths
+  key: string;       // numeric-as-string, e.g. "266"
+  name: string;      // display name
+  title: string;     // e.g. "the Darkin Blade"
+  tags: string[];    // e.g. ["Fighter", "Tank"]
+  blurb: string;     // short 1-2 sentence description
+  info: {            // Riot's difficulty rating (0-10)
+    attack: number;
+    defense: number;
+    magic: number;
+    difficulty: number;
+  };
+  stats: Record<string, number>;
+}
+
+let championSummaryPromise: Promise<ChampionSummary[]> | null = null;
+
+export async function getAllChampions(): Promise<ChampionSummary[]> {
+  if (!championSummaryPromise) {
+    championSummaryPromise = (async () => {
+      const version = await getLatestVersion();
+      const res = await fetch(
+        `${DDRAGON}/cdn/${version}/data/en_US/champion.json`,
+        { next: { revalidate: 86400 } }
+      );
+      if (!res.ok) return [];
+      const data = await res.json();
+      const list: ChampionSummary[] = Object.values(data.data);
+      // Sort alphabetically by default for consistent UI
+      list.sort((a, b) => a.name.localeCompare(b.name));
+      return list;
+    })();
+  }
+  return championSummaryPromise;
+}
+
+// Detailed champion with abilities + stats
+export interface ChampionSpell {
+  id: string;
+  name: string;
+  description: string;
+  tooltip: string;
+  cooldown: number[];   // per-rank cooldown values
+  cost: number[];       // per-rank mana cost
+  range: number[];      // per-rank range
+  image: { full: string };
+}
+
+export interface ChampionPassive {
+  name: string;
+  description: string;
+  image: { full: string };
+}
+
+export interface ChampionDetail extends ChampionSummary {
+  lore: string;
+  allytips: string[];
+  enemytips: string[];
+  spells: ChampionSpell[];  // Q, W, E, R in order
+  passive: ChampionPassive;
+  skins: Array<{ id: string; num: number; name: string; chromas: boolean }>;
+}
+
+const championDetailCache = new Map<string, Promise<ChampionDetail | null>>();
+
+export async function getChampionDetail(
+  championId: string
+): Promise<ChampionDetail | null> {
+  if (championDetailCache.has(championId)) {
+    return championDetailCache.get(championId)!;
+  }
+  const promise = (async () => {
+    const version = await getLatestVersion();
+    const res = await fetch(
+      `${DDRAGON}/cdn/${version}/data/en_US/champion/${championId}.json`,
+      { next: { revalidate: 86400 } }
+    );
+    if (!res.ok) return null;
+    const data = await res.json();
+    const detail = data.data?.[championId];
+    if (!detail) return null;
+    return detail as ChampionDetail;
+  })();
+  championDetailCache.set(championId, promise);
+  return promise;
+}
+
+// Resolve the spell icon (Q/W/E/R). image.full is like "AatroxQ.png"
+export function championSpellIconUrl(version: string, imageFull: string): string {
+  return `${DDRAGON}/cdn/${version}/img/spell/${imageFull}`;
+}
+
+// Resolve the passive icon
+export function championPassiveIconUrl(
+  version: string,
+  imageFull: string
+): string {
+  return `${DDRAGON}/cdn/${version}/img/passive/${imageFull}`;
+}
+
+// Splash art URL. Accepts a skin number — 0 = default skin.
+export function championSplashUrl(championId: string, skinNum = 0): string {
+  return `${DDRAGON}/cdn/img/champion/splash/${championId}_${skinNum}.jpg`;
+}
+
+// Loading screen card (portrait) — good alternative when splash is too wide
+export function championLoadingUrl(championId: string, skinNum = 0): string {
+  return `${DDRAGON}/cdn/img/champion/loading/${championId}_${skinNum}.jpg`;
+}
+
