@@ -32,6 +32,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
               <Link href="/pros" className="hover:text-accent transition-colors">
                 Pros
               </Link>
+              <Link href="/champions" className="hover:text-accent transition-colors">
+                Champions
+              </Link>
               <Link href="/leaderboard" className="hover:text-accent transition-colors">
                 Leaderboard
               </Link>
