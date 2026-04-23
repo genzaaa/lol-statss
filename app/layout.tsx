@@ -29,6 +29,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
               <Link href="/compare" className="hover:text-accent transition-colors">
                 Compare
               </Link>
+              <Link href="/pros" className="hover:text-accent transition-colors">
+                Pros
+              </Link>
               <Link href="/leaderboard" className="hover:text-accent transition-colors">
                 Leaderboard
               </Link>
