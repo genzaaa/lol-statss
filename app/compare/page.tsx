@@ -132,7 +132,14 @@ export default async function ComparePage({ searchParams }: Props) {
 
       {/* Head-to-head row — only if both loaded */}
       {!('error' in aProfile) && !('error' in bProfile) && (
-        <HeadToHead a={aProfile} b={bProfile} />
+        <>
+          <HeadToHead a={aProfile} b={bProfile} />
+          <ChampionPoolOverlap a={aProfile} b={bProfile} version={version} />
+          <RoleDistributions a={aProfile} b={bProfile} />
+          <RecentStreaks a={aProfile} b={bProfile} />
+          <BestChampions a={aProfile} b={bProfile} version={version} region={region} />
+          <CommonGames a={aProfile} b={bProfile} version={version} region={region} />
+        </>
       )}
     </div>
   );
@@ -412,4 +419,442 @@ function tierScore(entry?: LeagueEntry): number {
   const div = divs[entry.rank] ?? 0;
   const lp = entry.leaguePoints / 1000;
   return base + div + lp;
+}
+
+// Helper to pull this player's participant record from each match.
+function gamesFor(profile: Profile) {
+  return profile.matches
+    .map((m) => m.info.participants.find((p) => p.puuid === profile.account.puuid))
+    .filter((p): p is NonNullable<typeof p> => !!p);
+}
+
+// ================== Champion pool overlap ==================
+function ChampionPoolOverlap({
+  a,
+  b,
+  version,
+}: {
+  a: Profile;
+  b: Profile;
+  version: string;
+}) {
+  const aChamps = new Set(gamesFor(a).map((g) => g.championName));
+  const bChamps = new Set(gamesFor(b).map((g) => g.championName));
+  const shared = [...aChamps].filter((c) => bChamps.has(c));
+
+  const aLabel = a.account.gameName;
+  const bLabel = b.account.gameName;
+
+  return (
+    <div className="bg-panel border border-line rounded-lg p-4">
+      <h3 className="text-sm font-semibold uppercase tracking-wider text-gray-400 mb-3">
+        Champion pool overlap
+      </h3>
+      {shared.length === 0 ? (
+        <p className="text-xs text-gray-500">
+          No champions played by both players in their last 10 games.
+        </p>
+      ) : (
+        <>
+          <p className="text-xs text-gray-400 mb-3">
+            Both {aLabel} and {bLabel} have recently played{' '}
+            <span className="text-gray-200 font-semibold">{shared.length}</span>{' '}
+            of the same {shared.length === 1 ? 'champion' : 'champions'}:
+          </p>
+          <div className="flex flex-wrap gap-2">
+            {shared.map((c) => (
+              <Link
+                key={c}
+                href={`/champions/${c}`}
+                className="flex items-center gap-2 bg-panel2/40 border border-line rounded-md px-2 py-1 hover:border-accent transition-colors group"
+              >
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={champIconUrl(version, c)}
+                  alt={c}
+                  className="w-6 h-6 rounded"
+                />
+                <span className="text-xs text-gray-300 group-hover:text-accent transition-colors">
+                  {c}
+                </span>
+              </Link>
+            ))}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+// ================== Role distributions ==================
+function RoleDistributions({ a, b }: { a: Profile; b: Profile }) {
+  // Use teamPosition — it's the post-lane assignment Riot does.
+  // Values: TOP, JUNGLE, MIDDLE, BOTTOM, UTILITY, or '' for ARAM/bot lane bugs.
+  const roles = ['TOP', 'JUNGLE', 'MIDDLE', 'BOTTOM', 'UTILITY'] as const;
+  const labels: Record<(typeof roles)[number], string> = {
+    TOP: 'Top',
+    JUNGLE: 'Jungle',
+    MIDDLE: 'Mid',
+    BOTTOM: 'Bot',
+    UTILITY: 'Support',
+  };
+
+  function countRoles(profile: Profile) {
+    const games = gamesFor(profile);
+    const map: Record<string, number> = {};
+    for (const g of games) {
+      const r = (g as any).teamPosition || 'UNKNOWN';
+      map[r] = (map[r] ?? 0) + 1;
+    }
+    return { map, total: games.length };
+  }
+
+  const aRoles = countRoles(a);
+  const bRoles = countRoles(b);
+  if (aRoles.total === 0 && bRoles.total === 0) return null;
+
+  return (
+    <div className="bg-panel border border-line rounded-lg p-4">
+      <h3 className="text-sm font-semibold uppercase tracking-wider text-gray-400 mb-3">
+        Role distribution (last {Math.max(aRoles.total, bRoles.total)})
+      </h3>
+      <div className="grid md:grid-cols-2 gap-4">
+        <RoleBar
+          name={a.account.gameName}
+          counts={aRoles.map}
+          total={aRoles.total}
+          roles={roles}
+          labels={labels}
+        />
+        <RoleBar
+          name={b.account.gameName}
+          counts={bRoles.map}
+          total={bRoles.total}
+          roles={roles}
+          labels={labels}
+        />
+      </div>
+    </div>
+  );
+}
+
+function RoleBar({
+  name,
+  counts,
+  total,
+  roles,
+  labels,
+}: {
+  name: string;
+  counts: Record<string, number>;
+  total: number;
+  roles: readonly ('TOP' | 'JUNGLE' | 'MIDDLE' | 'BOTTOM' | 'UTILITY')[];
+  labels: Record<string, string>;
+}) {
+  if (total === 0) {
+    return (
+      <div>
+        <p className="text-xs text-gray-400 mb-2 truncate">{name}</p>
+        <p className="text-[11px] text-gray-600">No recent games</p>
+      </div>
+    );
+  }
+  const colors: Record<string, string> = {
+    TOP: 'bg-orange-500',
+    JUNGLE: 'bg-emerald-500',
+    MIDDLE: 'bg-purple-500',
+    BOTTOM: 'bg-red-500',
+    UTILITY: 'bg-blue-500',
+  };
+  return (
+    <div>
+      <p className="text-xs text-gray-300 mb-2 truncate" title={name}>
+        {name}
+      </p>
+      <div className="flex h-3 rounded-full overflow-hidden bg-panel2 mb-2">
+        {roles.map((r) => {
+          const pct = ((counts[r] ?? 0) / total) * 100;
+          if (pct === 0) return null;
+          return (
+            <div
+              key={r}
+              className={colors[r]}
+              style={{ width: `${pct}%` }}
+              title={`${labels[r]}: ${counts[r]}`}
+            />
+          );
+        })}
+      </div>
+      <div className="flex flex-wrap gap-x-3 gap-y-1 text-[10px]">
+        {roles.map((r) => {
+          const n = counts[r] ?? 0;
+          if (n === 0) return null;
+          return (
+            <span key={r} className="flex items-center gap-1 text-gray-400">
+              <span className={`w-2 h-2 rounded-full ${colors[r]}`} />
+              {labels[r]} {n}
+            </span>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+// ================== Recent streaks — last-10 W/L sequence ==================
+function RecentStreaks({ a, b }: { a: Profile; b: Profile }) {
+  function streak(profile: Profile) {
+    // Matches are already ordered newest-first from the Riot API.
+    return gamesFor(profile).map((g) => g.win);
+  }
+  const aSeq = streak(a);
+  const bSeq = streak(b);
+  if (aSeq.length === 0 && bSeq.length === 0) return null;
+
+  return (
+    <div className="bg-panel border border-line rounded-lg p-4">
+      <h3 className="text-sm font-semibold uppercase tracking-wider text-gray-400 mb-3">
+        Recent form (newest → oldest)
+      </h3>
+      <div className="grid md:grid-cols-2 gap-4">
+        <StreakRow name={a.account.gameName} results={aSeq} />
+        <StreakRow name={b.account.gameName} results={bSeq} />
+      </div>
+    </div>
+  );
+}
+
+function StreakRow({ name, results }: { name: string; results: boolean[] }) {
+  const wins = results.filter(Boolean).length;
+  const losses = results.length - wins;
+  return (
+    <div>
+      <div className="flex items-baseline justify-between mb-2">
+        <p className="text-xs text-gray-300 truncate" title={name}>
+          {name}
+        </p>
+        <p className="text-[11px] text-gray-500">
+          <span className="text-win font-semibold">{wins}W</span>{' '}
+          <span className="text-loss font-semibold">{losses}L</span>
+        </p>
+      </div>
+      {results.length === 0 ? (
+        <p className="text-[11px] text-gray-600">No recent games</p>
+      ) : (
+        <div className="flex gap-1">
+          {results.map((win, i) => (
+            <div
+              key={i}
+              className={`w-6 h-6 rounded flex items-center justify-center text-[10px] font-bold ${
+                win ? 'bg-win/20 text-win' : 'bg-loss/20 text-loss'
+              }`}
+              title={`Game ${i + 1}: ${win ? 'Win' : 'Loss'}`}
+            >
+              {win ? 'W' : 'L'}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ================== Best champion by WR (min 2 games) ==================
+function BestChampions({
+  a,
+  b,
+  version,
+  region,
+}: {
+  a: Profile;
+  b: Profile;
+  version: string;
+  region: Platform;
+}) {
+  function best(profile: Profile) {
+    const games = gamesFor(profile);
+    const stats = new Map<string, { games: number; wins: number; kda: number }>();
+    for (const g of games) {
+      const s = stats.get(g.championName) ?? { games: 0, wins: 0, kda: 0 };
+      s.games++;
+      if (g.win) s.wins++;
+      const deaths = Math.max(1, g.deaths);
+      s.kda += (g.kills + g.assists) / deaths;
+      stats.set(g.championName, s);
+    }
+    // Require at least 2 games to dampen small-sample luck.
+    const candidates = Array.from(stats.entries()).filter(
+      ([, s]) => s.games >= 2
+    );
+    if (candidates.length === 0) return null;
+    // Sort by WR then KDA as tiebreaker
+    candidates.sort((x, y) => {
+      const xWr = x[1].wins / x[1].games;
+      const yWr = y[1].wins / y[1].games;
+      if (xWr !== yWr) return yWr - xWr;
+      return y[1].kda / y[1].games - x[1].kda / x[1].games;
+    });
+    const [name, s] = candidates[0];
+    return {
+      name,
+      games: s.games,
+      wr: Math.round((s.wins / s.games) * 100),
+      avgKda: (s.kda / s.games).toFixed(2),
+    };
+  }
+
+  const aBest = best(a);
+  const bBest = best(b);
+  if (!aBest && !bBest) return null;
+
+  return (
+    <div className="bg-panel border border-line rounded-lg p-4">
+      <h3 className="text-sm font-semibold uppercase tracking-wider text-gray-400 mb-3">
+        Best champion (2+ games)
+      </h3>
+      <div className="grid md:grid-cols-2 gap-4">
+        <BestChampCard name={a.account.gameName} best={aBest} version={version} />
+        <BestChampCard name={b.account.gameName} best={bBest} version={version} />
+      </div>
+    </div>
+  );
+}
+
+function BestChampCard({
+  name,
+  best,
+  version,
+}: {
+  name: string;
+  best: { name: string; games: number; wr: number; avgKda: string } | null;
+  version: string;
+}) {
+  return (
+    <div>
+      <p className="text-xs text-gray-300 mb-2 truncate" title={name}>
+        {name}
+      </p>
+      {!best ? (
+        <p className="text-[11px] text-gray-600">Not enough games</p>
+      ) : (
+        <Link
+          href={`/champions/${best.name}`}
+          className="flex items-center gap-3 bg-panel2/40 border border-line rounded-md p-2 hover:border-accent transition-colors group"
+        >
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={champIconUrl(version, best.name)}
+            alt={best.name}
+            className="w-10 h-10 rounded"
+          />
+          <div className="min-w-0 flex-1">
+            <p className="text-sm font-semibold text-gray-100 group-hover:text-accent transition-colors truncate">
+              {best.name}
+            </p>
+            <p className="text-[11px] text-gray-500">
+              <span className="text-win">{best.wr}%</span> WR · {best.games}{' '}
+              games · {best.avgKda} KDA
+            </p>
+          </div>
+        </Link>
+      )}
+    </div>
+  );
+}
+
+// ================== Games played against each other ==================
+// Scan both players' recent match histories; any match ID that appears in
+// both means they were in the same game (either teammates or opponents).
+function CommonGames({
+  a,
+  b,
+  version,
+  region,
+}: {
+  a: Profile;
+  b: Profile;
+  version: string;
+  region: Platform;
+}) {
+  const aIds = new Set(a.matches.map((m) => m.metadata.matchId));
+  const shared = b.matches.filter((m) => aIds.has(m.metadata.matchId));
+  if (shared.length === 0) return null;
+
+  const rows = shared.map((m) => {
+    const aP = m.info.participants.find((p) => p.puuid === a.account.puuid)!;
+    const bP = m.info.participants.find((p) => p.puuid === b.account.puuid)!;
+    const sameTeam = aP.teamId === bP.teamId;
+    return { match: m, aP, bP, sameTeam };
+  });
+
+  const teammatesCount = rows.filter((r) => r.sameTeam).length;
+  const opponentsCount = rows.length - teammatesCount;
+
+  return (
+    <div className="bg-panel border border-accent/40 rounded-lg p-4">
+      <h3 className="text-sm font-semibold uppercase tracking-wider text-accent mb-1">
+        Played together
+      </h3>
+      <p className="text-xs text-gray-400 mb-3">
+        Found {rows.length} shared match{rows.length === 1 ? '' : 'es'} in their
+        recent histories ({teammatesCount} as teammates, {opponentsCount} as
+        opponents).
+      </p>
+      <div className="space-y-2">
+        {rows.map(({ match, aP, bP, sameTeam }) => (
+          <div
+            key={match.metadata.matchId}
+            className="flex items-center gap-3 bg-panel2/40 border border-line rounded-md p-2 text-xs"
+          >
+            <span
+              className={`text-[10px] uppercase tracking-wider font-bold px-2 py-0.5 rounded border ${
+                sameTeam
+                  ? 'text-accent bg-accent/10 border-accent/30'
+                  : 'text-yellow-300 bg-yellow-500/10 border-yellow-400/30'
+              }`}
+            >
+              {sameTeam ? 'Together' : 'vs'}
+            </span>
+            <ChampPill name={aP.championName} won={aP.win} version={version} />
+            <span className="text-gray-600">—</span>
+            <ChampPill name={bP.championName} won={bP.win} version={version} />
+            <Link
+              href={`/summoner/${region}/${encodeURIComponent(
+                a.account.gameName
+              )}-${encodeURIComponent(a.account.tagLine)}#${match.metadata.matchId}`}
+              className="ml-auto text-[10px] text-gray-500 hover:text-accent transition-colors"
+            >
+              View →
+            </Link>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function ChampPill({
+  name,
+  won,
+  version,
+}: {
+  name: string;
+  won: boolean;
+  version: string;
+}) {
+  return (
+    <div className="flex items-center gap-1.5">
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
+        src={champIconUrl(version, name)}
+        alt={name}
+        className={`w-6 h-6 rounded border ${
+          won ? 'border-win/40' : 'border-loss/40'
+        }`}
+      />
+      <span className={`${won ? 'text-win' : 'text-loss'} font-medium`}>
+        {name}
+      </span>
+    </div>
+  );
 }

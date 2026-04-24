@@ -8,7 +8,9 @@ import {
   championPassiveIconUrl,
   championSplashUrl,
   championLoadingUrl,
+  champIconUrl,
 } from '@/lib/ddragon';
+import { combosInvolving, type ClassicCombo } from '@/lib/combos';
 
 export const revalidate = 86400;
 
@@ -60,6 +62,43 @@ export default async function ChampionPage({ params }: Props) {
       description: 'Matchup data and synergy picks',
     },
   ];
+
+  // "Good against" = champions this one counters. "Good with" = synergies.
+  // u.gg has dedicated pages for both; these links jump straight to them
+  // with current-patch aggregated data from u.gg's match ingestion.
+  const counterLinks = [
+    {
+      name: 'Counters on u.gg',
+      href: `https://u.gg/lol/champions/${lowerName}/counter`,
+      description: `Who ${detail.name} beats and who beats ${detail.name}`,
+    },
+    {
+      name: 'Counters on OP.GG',
+      href: `https://op.gg/champions/${lowerName}/counters`,
+      description: 'Matchup winrates by lane',
+    },
+    {
+      name: 'Counters on Mobalytics',
+      href: `https://mobalytics.gg/lol/champions/${lowerName}/counters`,
+      description: 'Matchup breakdown with tips',
+    },
+  ];
+
+  const synergyLinks = [
+    {
+      name: 'Duo synergies on u.gg',
+      href: `https://u.gg/lol/champions/${lowerName}/duo`,
+      description: `Best teammates for ${detail.name}`,
+    },
+    {
+      name: 'Synergies on Lolalytics',
+      href: `https://lolalytics.com/lol/${lowerName}/duo/`,
+      description: 'Bot/support and jungle duo winrates',
+    },
+  ];
+
+  // Hand-curated iconic combos that mention this champion
+  const combos = combosInvolving(detail.id);
 
   return (
     <div className="space-y-6">
@@ -158,6 +197,61 @@ export default async function ChampionPage({ params }: Props) {
           We don't aggregate our own build data — these sites have the infrastructure to do it properly and update daily on patch.
         </p>
       </div>
+
+      {/* Matchups & synergies — outbound links to aggregation sites */}
+      <div className="grid md:grid-cols-2 gap-4">
+        <div className="bg-panel border border-loss/30 rounded-lg p-5">
+          <h2 className="text-lg font-semibold mb-1">
+            Good <span className="text-loss">against</span>
+          </h2>
+          <p className="text-xs text-gray-400 mb-3">
+            Counter data — who {detail.name} beats and who beats {detail.name}. Live winrates update on each site.
+          </p>
+          <div className="space-y-2">
+            {counterLinks.map((link) => (
+              <OutboundLink key={link.name} {...link} />
+            ))}
+          </div>
+        </div>
+
+        <div className="bg-panel border border-win/30 rounded-lg p-5">
+          <h2 className="text-lg font-semibold mb-1">
+            Good <span className="text-win">with</span>
+          </h2>
+          <p className="text-xs text-gray-400 mb-3">
+            Synergy data — best duo partners by winrate.
+          </p>
+          <div className="space-y-2">
+            {synergyLinks.map((link) => (
+              <OutboundLink key={link.name} {...link} />
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* Classic combos — hand-curated iconic pairings */}
+      {combos.length > 0 && (
+        <div className="bg-panel border border-line rounded-lg p-5">
+          <div className="flex items-baseline justify-between mb-3 flex-wrap gap-2">
+            <h2 className="text-lg font-semibold">
+              Classic combos with {detail.name}
+            </h2>
+            <p className="text-[11px] text-gray-600">
+              Iconic pairings · not live stats
+            </p>
+          </div>
+          <div className="space-y-3">
+            {combos.map((combo, i) => (
+              <ComboRow
+                key={i}
+                combo={combo}
+                version={version}
+                thisChampion={detail.id}
+              />
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Abilities */}
       <div className="bg-panel border border-line rounded-lg p-5">
@@ -319,6 +413,106 @@ function DifficultyPanel({
             </div>
           </div>
         ))}
+      </div>
+    </div>
+  );
+}
+
+// ------ Shared outbound link card (used in Good-with / Good-against) ------
+
+function OutboundLink({
+  name,
+  href,
+  description,
+}: {
+  name: string;
+  href: string;
+  description: string;
+}) {
+  return (
+    <a
+      href={href}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="flex items-center justify-between gap-3 p-3 rounded-md bg-panel2/40 border border-line hover:border-accent hover:bg-panel2/70 transition-colors group"
+    >
+      <div className="min-w-0">
+        <p className="font-semibold text-sm text-gray-100 group-hover:text-accent transition-colors">
+          {name}
+        </p>
+        <p className="text-xs text-gray-500 truncate">{description}</p>
+      </div>
+      <svg
+        className="w-4 h-4 text-gray-500 group-hover:text-accent transition-colors flex-shrink-0"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2"
+        viewBox="0 0 24 24"
+        aria-hidden="true"
+      >
+        <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" strokeLinecap="round" strokeLinejoin="round" />
+        <path d="M15 3h6v6" strokeLinecap="round" strokeLinejoin="round" />
+        <path d="M10 14 21 3" strokeLinecap="round" strokeLinejoin="round" />
+      </svg>
+    </a>
+  );
+}
+
+// ------ Classic combo row ------
+
+function ComboRow({
+  combo,
+  version,
+  thisChampion,
+}: {
+  combo: ClassicCombo;
+  version: string;
+  thisChampion: string;
+}) {
+  const tagColor: Record<ClassicCombo['tag'], string> = {
+    engage:    'text-red-300 bg-red-500/15 border-red-400/30',
+    teamfight: 'text-purple-300 bg-purple-500/15 border-purple-400/30',
+    pick:      'text-yellow-300 bg-yellow-500/15 border-yellow-400/30',
+    lane:      'text-blue-300 bg-blue-500/15 border-blue-400/30',
+    siege:     'text-emerald-300 bg-emerald-500/15 border-emerald-400/30',
+  };
+  // Ensure the other champion shows up visually first (the one that isn't
+  // the one we're already on the page for).
+  const orderedIds = [
+    ...combo.champions.filter((c) => c !== thisChampion),
+    ...combo.champions.filter((c) => c === thisChampion),
+  ];
+  return (
+    <div className="flex items-start gap-3 p-3 rounded-md bg-panel2/40 border border-line">
+      <div className="flex -space-x-2 flex-shrink-0">
+        {orderedIds.map((id) => (
+          <Link
+            key={id}
+            href={`/champions/${id}`}
+            className="relative"
+            title={id}
+          >
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={champIconUrl(version, id)}
+              alt={id}
+              className="w-12 h-12 rounded-md border-2 border-line hover:border-accent transition-colors"
+            />
+          </Link>
+        ))}
+      </div>
+      <div className="min-w-0 flex-1">
+        <div className="flex items-baseline gap-2 flex-wrap mb-1">
+          <p className="font-semibold text-sm text-gray-100">{combo.title}</p>
+          <span
+            className={`text-[9px] uppercase tracking-wider font-semibold border rounded px-1.5 py-0.5 ${tagColor[combo.tag]}`}
+          >
+            {combo.tag}
+          </span>
+        </div>
+        <p className="text-xs text-gray-300 leading-relaxed">
+          {combo.description}
+        </p>
       </div>
     </div>
   );
