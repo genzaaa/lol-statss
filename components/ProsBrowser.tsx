@@ -10,12 +10,25 @@ import { PLATFORM_LABELS, type Platform } from '@/lib/regions';
 // header. The leagues are just a best-effort grouping; if a team doesn't
 // fit any, it gets sorted into "Other".
 const LEAGUE_FOR_TEAM: Record<string, string> = {
+  // LCK
   'T1': 'LCK',
   'Gen.G': 'LCK',
   'Hanwha Life Esports': 'LCK',
+  'KT Rolster': 'LCK',
+  'Dplus KIA': 'LCK',
+  // LEC
   'G2 Esports': 'LEC',
   'Fnatic': 'LEC',
+  'Karmine Corp': 'LEC',
+  'Team Heretics': 'LEC',
   'Witchcraft': 'LEC',
+  'Los Ratones': 'LEC',
+  // LCS
+  'Team Liquid': 'LCS',
+  'Cloud9': 'LCS',
+  'FlyQuest': 'LCS',
+  // LPL
+  'Bilibili Gaming': 'LPL',
 };
 
 const LEAGUE_ORDER = ['LCK', 'LEC', 'LCS', 'LPL', 'Other'] as const;
