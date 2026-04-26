@@ -212,20 +212,35 @@ export function ProsBrowser({ pros }: { pros: Pro[] }) {
 function ProCard({ pro }: { pro: Pro }) {
   return (
     <div className="bg-panel border border-line rounded-lg p-4">
-      <div className="flex items-baseline justify-between gap-2 mb-1">
-        <h3 className="font-semibold text-lg">{pro.name}</h3>
-        <RoleBadge role={pro.role} />
-      </div>
-      <p className="text-xs text-gray-400 mb-3">
-        <span className="text-gray-200">{pro.team}</span>
-        <span className="text-gray-600"> · </span>
-        <span>{pro.country}</span>
-      </p>
+      <Link
+        href={`/pros/${pro.slug}`}
+        className="block group"
+      >
+        <div className="flex items-baseline justify-between gap-2 mb-1">
+          <h3 className="font-semibold text-lg group-hover:text-accent transition-colors">
+            {pro.name}
+          </h3>
+          <RoleBadge role={pro.role} />
+        </div>
+        <p className="text-xs text-gray-400 mb-3">
+          <span className="text-gray-200">{pro.team}</span>
+          <span className="text-gray-600"> · </span>
+          <span>{pro.country}</span>
+        </p>
+      </Link>
 
       <div className="space-y-1">
-        <p className="text-[10px] uppercase tracking-wider text-gray-500 mb-1">
-          Accounts ({pro.accounts.length})
-        </p>
+        <div className="flex items-baseline justify-between mb-1">
+          <p className="text-[10px] uppercase tracking-wider text-gray-500">
+            Accounts ({pro.accounts.length})
+          </p>
+          <Link
+            href={`/pros/${pro.slug}`}
+            className="text-[10px] text-gray-500 hover:text-accent transition-colors"
+          >
+            Verify live →
+          </Link>
+        </div>
         {pro.accounts.map((acc, i) => {
           const href = `/summoner/${acc.region}/${encodeURIComponent(
             acc.gameName
