@@ -38,8 +38,9 @@ export const PROS: Pro[] = [
     country: 'South Korea',
     team: 'T1',
     role: 'Mid',
-    primaryRegion: 'euw1',
+    primaryRegion: 'kr',
     accounts: [
+      { gameName: 'Hide on bush',      tagLine: 'KR1',   region: 'kr' },
       { gameName: 'THmCX8U4yahp39sz', tagLine: 'EUW',   region: 'euw1' },
       { gameName: 'wincg',             tagLine: '84926', region: 'euw1' },
       { gameName: 'silent silence',    tagLine: '08022', region: 'euw1' },
@@ -90,8 +91,9 @@ export const PROS: Pro[] = [
     country: 'South Korea',
     team: 'T1',
     role: 'Support',
-    primaryRegion: 'euw1',
+    primaryRegion: 'kr',
     accounts: [
+      { gameName: 'Keria',          tagLine: '4111',  region: 'kr' },
       { gameName: 'The Kid Keria',  tagLine: 'EUW',   region: 'euw1' },
       { gameName: 'Ai Aqua Ruby',   tagLine: '66298', region: 'euw1' },
       { gameName: 'triplestar',     tagLine: 'star',  region: 'euw1' },
@@ -128,8 +130,9 @@ export const PROS: Pro[] = [
     country: 'South Korea',
     team: 'Gen.G',
     role: 'Mid',
-    primaryRegion: 'euw1',
+    primaryRegion: 'kr',
     accounts: [
+      { gameName: '허거덩',              tagLine: '0303',  region: 'kr' },
       { gameName: 'Pd8JbseaJwwjQpNH', tagLine: 'EUW',   region: 'euw1' },
       { gameName: 'Shrimp Shark',      tagLine: '43083', region: 'euw1' },
       { gameName: 'lIlIlIIllIlllIIl',  tagLine: 'EUW',   region: 'euw1' },
