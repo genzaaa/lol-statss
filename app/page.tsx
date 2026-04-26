@@ -2,13 +2,14 @@
 
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
-import { PLATFORM_LABELS } from '@/lib/regions';
+import { PLATFORM_LABELS, type Platform } from '@/lib/regions';
+import { RecentSearches, pushRecentSearch } from '@/components/RecentSearches';
 
 const REGIONS = Object.keys(PLATFORM_LABELS) as Array<keyof typeof PLATFORM_LABELS>;
 
 export default function Home() {
   const router = useRouter();
-  const [region, setRegion] = useState<string>('euw1');
+  const [region, setRegion] = useState<Platform>('euw1');
   const [riotId, setRiotId] = useState('');
 
   function onSubmit(e: React.FormEvent) {
@@ -29,6 +30,8 @@ export default function Home() {
       return;
     }
 
+    pushRecentSearch({ region, gameName, tagLine });
+
     const encoded = `${encodeURIComponent(gameName)}-${encodeURIComponent(tagLine)}`;
     router.push(`/summoner/${region}/${encoded}`);
   }
@@ -46,7 +49,7 @@ export default function Home() {
         <form onSubmit={onSubmit} className="flex flex-col sm:flex-row gap-2">
           <select
             value={region}
-            onChange={(e) => setRegion(e.target.value)}
+            onChange={(e) => setRegion(e.target.value as Platform)}
             className="bg-panel border border-line rounded-lg px-4 py-3 text-sm font-medium focus:border-accent focus:outline-none cursor-pointer"
             aria-label="Region"
           >
@@ -75,6 +78,8 @@ export default function Home() {
           Example: Faker#KR1 (KR) • Caps#EUW (EUW)
         </p>
       </div>
+
+      <RecentSearches />
 
       <div className="grid md:grid-cols-3 gap-4 mt-20">
         <FeatureCard
