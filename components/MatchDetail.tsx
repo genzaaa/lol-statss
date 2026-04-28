@@ -11,6 +11,7 @@ import {
 } from '@/lib/ddragon';
 import { kda } from '@/lib/format';
 import { MatchTimeline } from './MatchTimeline';
+import { ReplayHelp } from './ReplayHelp';
 
 // Extract the Platform from the match ID prefix.
 // Match IDs look like "EUW1_1234567890" or "KR_1234567890".
@@ -42,6 +43,16 @@ export function MatchDetail({
   const red = match.info.participants.filter((p) => p.teamId === 200);
   const blueTeam = match.info.teams?.find((t) => t.teamId === 100);
   const redTeam = match.info.teams?.find((t) => t.teamId === 200);
+
+  // Pull this player's Riot ID from the match participants — used to build
+  // outbound links (e.g. OP.GG match URL, replay help). Match-v5 returns
+  // `riotIdGameName` and `riotIdTagline` per participant; older matches
+  // may only have `summonerName`.
+  const me = match.info.participants.find((p) => p.puuid === puuid);
+  const meRiotIdParts = {
+    gameName: me?.riotIdGameName ?? me?.summonerName ?? '',
+    tagLine: me?.riotIdTagline ?? '',
+  };
 
   // Max damage for bar scaling — across both teams for apples-to-apples
   const maxDmg = Math.max(
@@ -92,19 +103,28 @@ export function MatchDetail({
         <BansRow blue={blueTeam?.bans ?? []} red={redTeam?.bans ?? []} />
       )}
 
-      {/* Match timeline — lazy-loaded on demand. We only show the toggle if
-          we could determine the region from the match ID, since the timeline
-          API needs it. */}
+      {/* Match timeline + replay help — both lazy. Timeline only shows if
+          we could determine region from the match ID. ReplayHelp is always
+          available (no API calls). */}
       {region && (
-        <div>
+        <div className="space-y-2">
           {!showTimeline ? (
-            <button
-              type="button"
-              onClick={() => setShowTimeline(true)}
-              className="w-full text-xs text-gray-400 hover:text-accent border border-line hover:border-accent rounded-md py-2 transition-colors"
-            >
-              Show match timeline →
-            </button>
+            <div className="grid sm:grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => setShowTimeline(true)}
+                className="text-xs text-gray-400 hover:text-accent border border-line hover:border-accent rounded-md py-2 transition-colors"
+              >
+                Show match timeline →
+              </button>
+              <ReplayHelpToggle
+                region={region}
+                matchId={match.metadata.matchId}
+                gameName={meRiotIdParts.gameName}
+                tagLine={meRiotIdParts.tagLine}
+                gameEndTimestamp={match.info.gameEndTimestamp}
+              />
+            </div>
           ) : (
             <div>
               <div className="flex items-baseline justify-between mb-2">
@@ -131,6 +151,20 @@ export function MatchDetail({
       )}
     </div>
   );
+}
+
+/**
+ * Standalone wrapper around ReplayHelp that toggles its own collapse
+ * state, matching the API expected by MatchDetail's button row.
+ */
+function ReplayHelpToggle(props: {
+  region: import('@/lib/regions').Platform;
+  matchId: string;
+  gameName: string;
+  tagLine: string;
+  gameEndTimestamp?: number;
+}) {
+  return <ReplayHelp {...props} />;
 }
 
 // ---------------- Team Objectives ----------------
