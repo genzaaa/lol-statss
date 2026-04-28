@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import type { Match, MatchParticipant } from '@/lib/riot';
+import type { Match, MatchParticipant, Platform } from '@/lib/riot';
 import {
   champIconUrl,
   itemIconUrl,
@@ -10,6 +10,21 @@ import {
   roleLabel,
 } from '@/lib/ddragon';
 import { kda } from '@/lib/format';
+import { MatchTimeline } from './MatchTimeline';
+
+// Extract the Platform from the match ID prefix.
+// Match IDs look like "EUW1_1234567890" or "KR_1234567890".
+function platformFromMatchId(matchId: string): Platform | null {
+  const prefix = matchId.split('_')[0]?.toLowerCase();
+  if (!prefix) return null;
+  // Must match one of the keys of PLATFORM_HOSTS
+  const known: Platform[] = [
+    'br1', 'eun1', 'euw1', 'jp1', 'kr', 'la1', 'la2',
+    'na1', 'oc1', 'tr1', 'ru',
+  ];
+  if ((known as string[]).includes(prefix)) return prefix as Platform;
+  return null;
+}
 
 export function MatchDetail({
   match,
@@ -20,6 +35,9 @@ export function MatchDetail({
   puuid: string;
   version: string;
 }) {
+  const [showTimeline, setShowTimeline] = useState(false);
+  const region = platformFromMatchId(match.metadata.matchId);
+
   const blue = match.info.participants.filter((p) => p.teamId === 100);
   const red = match.info.participants.filter((p) => p.teamId === 200);
   const blueTeam = match.info.teams?.find((t) => t.teamId === 100);
@@ -72,6 +90,44 @@ export function MatchDetail({
       {/* Bans */}
       {(blueTeam?.bans?.length || redTeam?.bans?.length) && (
         <BansRow blue={blueTeam?.bans ?? []} red={redTeam?.bans ?? []} />
+      )}
+
+      {/* Match timeline — lazy-loaded on demand. We only show the toggle if
+          we could determine the region from the match ID, since the timeline
+          API needs it. */}
+      {region && (
+        <div>
+          {!showTimeline ? (
+            <button
+              type="button"
+              onClick={() => setShowTimeline(true)}
+              className="w-full text-xs text-gray-400 hover:text-accent border border-line hover:border-accent rounded-md py-2 transition-colors"
+            >
+              Show match timeline →
+            </button>
+          ) : (
+            <div>
+              <div className="flex items-baseline justify-between mb-2">
+                <p className="text-xs uppercase tracking-wider text-gray-400">
+                  Match timeline
+                </p>
+                <button
+                  type="button"
+                  onClick={() => setShowTimeline(false)}
+                  className="text-[11px] text-gray-500 hover:text-gray-300 transition-colors"
+                >
+                  Hide
+                </button>
+              </div>
+              <MatchTimeline
+                region={region}
+                matchId={match.metadata.matchId}
+                match={match}
+                version={version}
+              />
+            </div>
+          )}
+        </div>
       )}
     </div>
   );
