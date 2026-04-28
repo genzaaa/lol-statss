@@ -21,6 +21,7 @@ import { MatchList } from '@/components/MatchList';
 import { MasteryPanel } from '@/components/MasteryPanel';
 import { ChampionSummary } from '@/components/ChampionSummary';
 import { LiveGameBanner } from '@/components/LiveGameBanner';
+import { ProfileStats } from '@/components/ProfileStats';
 import { winrate } from '@/lib/format';
 
 // Revalidate the page every 60 seconds
@@ -266,6 +267,15 @@ export default async function SummonerPage({ params }: Props) {
 
       {/* Champion mastery */}
       <MasteryPanel region={region} puuid={account.puuid} version={version} />
+
+      {/* Aggregated ranked stats — per-position breakdown, best/worst champ */}
+      {validMatches.length > 0 && (
+        <ProfileStats
+          matches={validMatches}
+          puuid={account.puuid}
+          version={version}
+        />
+      )}
 
       {/* Recent champion performance — aggregates the matches we already have */}
       {validMatches.length > 0 && (

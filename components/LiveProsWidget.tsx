@@ -145,7 +145,7 @@ function LiveProCard({ pro, version }: { pro: LivePro; version: string }) {
   )}-${encodeURIComponent(pro.tagLine)}`;
   return (
     <div className="space-y-1">
-      <div className="flex items-center gap-3 p-2 rounded-md bg-panel2/40 border border-line hover:border-accent transition-colors group">
+      <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3 p-2 rounded-md bg-panel2/40 border border-line hover:border-accent transition-colors group">
         <Link href={profileHref} className="flex items-center gap-3 min-w-0 flex-1">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
@@ -161,7 +161,7 @@ function LiveProCard({ pro, version }: { pro: LivePro; version: string }) {
                 {pro.team}
               </span>
             </p>
-            <p className="text-[11px] text-gray-500 flex items-center gap-1.5">
+            <p className="text-[11px] text-gray-500 flex items-center gap-1.5 flex-wrap">
               <span>{queueLabel(pro.queueId)} · {formatGameLength(pro.gameLength)}</span>
               {pro.twitchUsername && pro.twitchViewers !== undefined && (
                 <span className="text-purple-400" title={`${pro.twitchViewers.toLocaleString()} Twitch viewers`}>
@@ -171,7 +171,7 @@ function LiveProCard({ pro, version }: { pro: LivePro; version: string }) {
             </p>
           </div>
         </Link>
-        <div className="flex items-center gap-1.5 flex-shrink-0">
+        <div className="flex items-center gap-1.5 flex-shrink-0 sm:self-auto self-stretch justify-end">
           {pro.twitchUsername && (
             <TwitchEmbed channel={pro.twitchUsername} />
           )}
