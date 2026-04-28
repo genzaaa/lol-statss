@@ -473,6 +473,12 @@ export interface CurrentGame {
     spell1Id: number;
     spell2Id: number;
   }>;
+  /** Spectator encryption credentials. Required to launch a live spectate
+   * session via the League client. Riot returns this in every active-game
+   * response but the field name is "observers" not "spectator". */
+  observers?: {
+    encryptionKey: string;
+  };
 }
 
 export async function getCurrentGame(
