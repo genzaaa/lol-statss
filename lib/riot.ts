@@ -15,41 +15,93 @@ export type { Platform };
 
 const KEY = process.env.RIOT_API_KEY;
 
-// Simple in-memory cache with TTL. Good enough for a small project.
-// On Vercel this resets on cold starts, which naturally keeps data fresh.
-type CacheEntry = { data: unknown; expires: number };
-const cache = new Map<string, CacheEntry>();
+// All Riot API responses go through lib/kv-cache.ts which provides
+// two-tier caching (in-memory + Vercel KV). The KV layer is opt-in via
+// env vars; if unconfigured the fallback is just in-memory per instance.
 
-async function riotFetch<T>(url: string, ttlMs = 60_000): Promise<T> {
+import { cached } from './kv-cache';
+
+/**
+ * Sleep for the given milliseconds.
+ */
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/**
+ * Perform the actual Riot API request, with rate-limit-aware retry.
+ *
+ * Riot returns 429 with a Retry-After header (seconds) when we hit a
+ * limit. We respect that header up to a sane maximum (3 attempts, max
+ * 5 second wait). Beyond that we surface the 429 to the caller.
+ *
+ * Other transient errors (502/503/504) get one quick retry.
+ */
+async function riotFetchRaw<T>(url: string): Promise<T> {
   if (!KEY) {
     throw new Error(
       'RIOT_API_KEY is not set. Add it to .env.local or Vercel environment variables.'
     );
   }
 
-  const cached = cache.get(url);
-  if (cached && cached.expires > Date.now()) {
-    return cached.data as T;
-  }
+  const MAX_ATTEMPTS = 3;
+  let lastError: any = null;
 
-  const res = await fetch(url, {
-    headers: { 'X-Riot-Token': KEY },
-    // Next.js fetch caching — works on Vercel edge
-    next: { revalidate: Math.floor(ttlMs / 1000) },
-  });
+  for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
+    const res = await fetch(url, {
+      headers: { 'X-Riot-Token': KEY },
+      // We're already caching at the KV layer; tell Next.js not to re-cache.
+      cache: 'no-store',
+    });
 
-  if (!res.ok) {
+    if (res.ok) {
+      return (await res.json()) as T;
+    }
+
+    if (res.status === 429) {
+      // Rate limited. Riot returns Retry-After in seconds.
+      const retryAfter = parseInt(res.headers.get('retry-after') ?? '1', 10);
+      const waitMs = Math.min(retryAfter * 1000, 5000);
+      if (attempt < MAX_ATTEMPTS - 1) {
+        await sleep(waitMs);
+        continue;
+      }
+      // Out of retries — propagate
+    } else if (res.status >= 502 && res.status <= 504) {
+      // Transient gateway error — retry once with brief backoff
+      if (attempt < MAX_ATTEMPTS - 1) {
+        await sleep(500);
+        continue;
+      }
+    }
+
+    // Permanent error or out of retries — throw
     const body = await res.text();
     const err: any = new Error(
       `Riot API ${res.status}: ${res.statusText}${body ? ` — ${body}` : ''}`
     );
     err.status = res.status;
+    err.isRateLimit = res.status === 429;
     throw err;
   }
 
-  const data = (await res.json()) as T;
-  cache.set(url, { data, expires: Date.now() + ttlMs });
-  return data;
+  throw lastError ?? new Error('riotFetchRaw: exhausted retries');
+}
+
+/**
+ * Cached Riot API fetch.
+ *
+ * Wraps the raw fetch with a two-tier cache (in-memory + Vercel KV) so
+ * repeat requests for the same URL are served from cache. Pick a TTL
+ * appropriate to the endpoint — see TTL constants in lib/kv-cache.ts.
+ *
+ * Backwards-compatible signature: legacy callers passed ttlMs in
+ * milliseconds. We continue to accept that for compatibility, converting
+ * to seconds for the cache layer.
+ */
+async function riotFetch<T>(url: string, ttlMs = 60_000): Promise<T> {
+  const ttlSec = Math.max(1, Math.floor(ttlMs / 1000));
+  return cached(url, ttlSec, () => riotFetchRaw<T>(url));
 }
 
 // ========================= Account / Summoner =========================
@@ -307,7 +359,7 @@ export interface Match {
 export async function getMatch(platform: Platform, matchId: string): Promise<Match> {
   const host = REGIONAL_HOSTS[regionalFor(platform)];
   const url = `https://${host}/lol/match/v5/matches/${matchId}`;
-  return riotFetch<Match>(url, 3_600_000); // matches don't change — cache 1h
+  return riotFetch<Match>(url, 7 * 24 * 60 * 60 * 1000); // 7d — matches are immutable
 }
 
 // ========================= Match Timeline =========================
@@ -367,7 +419,7 @@ export async function getMatchTimeline(
 ): Promise<MatchTimeline> {
   const host = REGIONAL_HOSTS[regionalFor(platform)];
   const url = `https://${host}/lol/match/v5/matches/${matchId}/timeline`;
-  return riotFetch<MatchTimeline>(url, 3_600_000);
+  return riotFetch<MatchTimeline>(url, 7 * 24 * 60 * 60 * 1000); // 7d — immutable
 }
 
 // ========================= Champion Mastery =========================
@@ -391,7 +443,7 @@ export async function getTopMasteries(
 ): Promise<ChampionMastery[]> {
   const host = PLATFORM_HOSTS[platform];
   const url = `https://${host}/lol/champion-mastery/v4/champion-masteries/by-puuid/${puuid}/top?count=${count}`;
-  return riotFetch<ChampionMastery[]>(url, 300_000);
+  return riotFetch<ChampionMastery[]>(url, 60 * 60 * 1000); // 1h
 }
 
 export async function getMasteryScore(
@@ -400,7 +452,7 @@ export async function getMasteryScore(
 ): Promise<number> {
   const host = PLATFORM_HOSTS[platform];
   const url = `https://${host}/lol/champion-mastery/v4/scores/by-puuid/${puuid}`;
-  return riotFetch<number>(url, 300_000);
+  return riotFetch<number>(url, 60 * 60 * 1000); // 1h
 }
 
 // ========================= Live Game =========================
