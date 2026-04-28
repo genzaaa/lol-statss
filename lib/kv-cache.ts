@@ -26,9 +26,12 @@ async function getRedis(): Promise<RedisClientType | null> {
 
   const url = process.env.REDIS_URL;
   if (!url) {
+    console.log('[cache] REDIS_URL not set — using in-memory only');
     redisDisabled = true;
     return null;
   }
+
+  console.log('[cache] connecting to Redis...');
 
   redisPromise = (async () => {
     try {
@@ -47,6 +50,7 @@ async function getRedis(): Promise<RedisClientType | null> {
         console.warn('[redis-cache] client error:', err?.message ?? err);
       });
       await client.connect();
+      console.log('[cache] Redis connected successfully');
       return client;
     } catch (e: any) {
       console.warn(
@@ -115,7 +119,9 @@ export async function cached<T>(
 ): Promise<T> {
   // 1. Memory hit?
   const memHit = memGet(key);
-  if (memHit !== null) return memHit as T;
+  if (memHit !== null) {
+    return memHit as T;
+  }
 
   // 2. Redis hit?
   const client = await getRedis();

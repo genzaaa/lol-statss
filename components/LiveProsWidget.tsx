@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import type { LivePro } from '@/app/api/pros-live/route';
+import { SpectateButton } from './SpectateButton';
 
 interface ApiResponse {
   checked: number;
@@ -142,28 +143,33 @@ function LiveProCard({ pro, version }: { pro: LivePro; version: string }) {
     pro.gameName
   )}-${encodeURIComponent(pro.tagLine)}`;
   return (
-    <Link
-      href={profileHref}
-      className="flex items-center gap-3 p-2 rounded-md bg-panel2/40 border border-line hover:border-accent transition-colors group"
-    >
-      {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img
-        src={champIcon(version, pro.championKey)}
-        alt={pro.championKey}
-        className="w-10 h-10 rounded flex-shrink-0"
+    <div className="flex items-center gap-3 p-2 rounded-md bg-panel2/40 border border-line hover:border-accent transition-colors group">
+      <Link href={profileHref} className="flex items-center gap-3 min-w-0 flex-1">
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src={champIcon(version, pro.championKey)}
+          alt={pro.championKey}
+          className="w-10 h-10 rounded flex-shrink-0"
+        />
+        <div className="min-w-0 flex-1">
+          <p className="text-sm font-semibold text-gray-100 group-hover:text-accent transition-colors truncate">
+            {pro.name}
+            <span className="text-gray-500 font-normal text-xs">
+              {' · '}
+              {pro.team}
+            </span>
+          </p>
+          <p className="text-[11px] text-gray-500">
+            {queueLabel(pro.queueId)} · {formatGameLength(pro.gameLength)}
+          </p>
+        </div>
+      </Link>
+      <SpectateButton
+        region={pro.region}
+        gameName={pro.gameName}
+        tagLine={pro.tagLine}
+        variant="compact"
       />
-      <div className="min-w-0 flex-1">
-        <p className="text-sm font-semibold text-gray-100 group-hover:text-accent transition-colors truncate">
-          {pro.name}
-          <span className="text-gray-500 font-normal text-xs">
-            {' · '}
-            {pro.team}
-          </span>
-        </p>
-        <p className="text-[11px] text-gray-500">
-          {queueLabel(pro.queueId)} · {formatGameLength(pro.gameLength)}
-        </p>
-      </div>
-    </Link>
+    </div>
   );
 }
