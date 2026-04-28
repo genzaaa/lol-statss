@@ -51,9 +51,21 @@ export function MatchTimeline({ region, matchId, match, version }: Props) {
     );
   }
   if (error) {
+    // 429 = Riot rate-limited us. After deploying the KV cache this should
+    // be rare, but surface a user-friendly hint when it does happen.
+    const isRateLimit = /429/.test(error);
     return (
-      <div className="bg-panel border border-line rounded-md p-4 text-sm text-loss">
-        Couldn't load timeline: {error}
+      <div className="bg-panel border border-line rounded-md p-4 text-sm">
+        <p className={isRateLimit ? 'text-yellow-300' : 'text-loss'}>
+          {isRateLimit
+            ? 'Hit our API rate limit. Try again in a few seconds.'
+            : `Couldn't load timeline: ${error}`}
+        </p>
+        {isRateLimit && (
+          <p className="text-[11px] text-gray-500 mt-1">
+            Riot dev keys allow ~100 requests / 2 min. Cached timelines load instantly the next time.
+          </p>
+        )}
       </div>
     );
   }
