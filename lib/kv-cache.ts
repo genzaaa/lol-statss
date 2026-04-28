@@ -1,49 +1,68 @@
-// Persistent response cache backed by Vercel KV (Redis).
+// Persistent response cache backed by Vercel Marketplace Redis.
 //
 // This module wraps async data-fetchers with a cache so we don't re-fetch
 // the same Riot API endpoint when many users view the same profile.
 //
 // Two-tier:
 //   1. Local in-memory cache (per serverless instance) for blistering reads
-//   2. Vercel KV for cross-instance persistence
+//   2. Redis (cross-instance, persistent) for durable caching
 //
-// If Vercel KV isn't configured (no env vars), we silently fall back to
-// in-memory only. This keeps local dev simple and means the site doesn't
-// break if you forget to provision KV — you just don't get cross-instance
-// caching.
+// If REDIS_URL isn't set, we silently fall back to in-memory only. This
+// keeps local dev simple and means the site doesn't break before you
+// provision Redis — you just don't get cross-instance caching.
 
 import 'server-only';
+import type { RedisClientType } from 'redis';
 
-// Lazy import — @vercel/kv reads env vars at module load and throws if
-// they're missing. We don't want to crash the build for users who haven't
-// provisioned KV yet.
-let kvClient: typeof import('@vercel/kv').kv | null = null;
-let kvImportAttempted = false;
+// Lazy import + module-level connection. Serverless functions reuse the
+// module instance across invocations within the same warm container, so
+// caching the client here amortizes the connect() cost.
+let redisPromise: Promise<RedisClientType | null> | null = null;
+let redisDisabled = false;
 
-async function getKv() {
-  if (kvImportAttempted) return kvClient;
-  kvImportAttempted = true;
+async function getRedis(): Promise<RedisClientType | null> {
+  if (redisDisabled) return null;
+  if (redisPromise) return redisPromise;
 
-  // Only attempt to import if the env vars are present. Otherwise we get
-  // a noisy warning at module load.
-  if (!process.env.KV_REST_API_URL || !process.env.KV_REST_API_TOKEN) {
+  const url = process.env.REDIS_URL;
+  if (!url) {
+    redisDisabled = true;
     return null;
   }
-  try {
-    const mod = await import('@vercel/kv');
-    kvClient = mod.kv;
-    return kvClient;
-  } catch (e) {
-    // Module not installed or failed to load — fall back to memory-only
-    console.warn(
-      '[kv-cache] @vercel/kv not available, falling back to in-memory cache'
-    );
-    return null;
-  }
+
+  redisPromise = (async () => {
+    try {
+      const { createClient } = await import('redis');
+      const client = createClient({
+        url,
+        // Short-lived requests — don't hang forever if Redis is unreachable
+        socket: { connectTimeout: 3000, reconnectStrategy: false },
+      }) as RedisClientType;
+      // Quietly handle errors — we never want Redis problems to surface as
+      // user-facing 500s. The cache is a perf optimization, not the source
+      // of truth.
+      client.on('error', (err) => {
+        // First error: log and disable for this container's lifetime.
+        // Reconnecting on every request would amplify problems.
+        console.warn('[redis-cache] client error:', err?.message ?? err);
+      });
+      await client.connect();
+      return client;
+    } catch (e: any) {
+      console.warn(
+        '[redis-cache] failed to connect, falling back to in-memory:',
+        e?.message ?? e
+      );
+      redisDisabled = true;
+      return null;
+    }
+  })();
+
+  return redisPromise;
 }
 
 // In-memory cache as a fallback / first-tier. Reset on cold start, which
-// is fine — KV is the durable layer.
+// is fine — Redis is the durable layer.
 interface MemEntry {
   value: any;
   expiresAt: number;
@@ -84,10 +103,10 @@ function memGet(key: string): any | null {
  *
  * Behavior:
  * - First checks in-memory cache (per-instance, fastest)
- * - Then checks Vercel KV (cross-instance)
+ * - Then checks Redis (cross-instance)
  * - On miss, calls fetcher() and writes to BOTH layers
- * - Errors from KV are logged but don't block the request — we just fall
- *   through to the fetcher
+ * - Errors from Redis are logged but don't block the request — we just
+ *   fall through to the fetcher
  */
 export async function cached<T>(
   key: string,
@@ -98,32 +117,38 @@ export async function cached<T>(
   const memHit = memGet(key);
   if (memHit !== null) return memHit as T;
 
-  // 2. KV hit?
-  const kv = await getKv();
-  if (kv) {
+  // 2. Redis hit?
+  const client = await getRedis();
+  if (client) {
     try {
-      const kvHit = await kv.get<T>(key);
-      if (kvHit !== null && kvHit !== undefined) {
-        // Backfill memory so subsequent reads in this instance are fast
-        memSet(key, kvHit, ttlSec * 1000);
-        return kvHit;
+      const raw = await client.get(key);
+      if (raw !== null && raw !== undefined) {
+        try {
+          const parsed = JSON.parse(raw) as T;
+          // Backfill memory so subsequent reads in this instance are fast
+          memSet(key, parsed, ttlSec * 1000);
+          return parsed;
+        } catch {
+          // Bad JSON — treat as miss and refetch
+        }
       }
-    } catch (e) {
-      // KV down? Continue to fetcher
-      console.warn('[kv-cache] KV read failed:', e);
+    } catch (e: any) {
+      console.warn('[redis-cache] read failed:', e?.message ?? e);
     }
   }
 
   // 3. Miss — call fetcher
   const value = await fetcher();
 
-  // Write to both layers. Don't await KV write — it's nice-to-have; if
-  // it fails we still served the value.
+  // Write to both layers. Don't await Redis write — it's nice-to-have;
+  // if it fails we still served the value.
   memSet(key, value, ttlSec * 1000);
-  if (kv) {
-    kv.set(key, value, { ex: ttlSec }).catch((e) => {
-      console.warn('[kv-cache] KV write failed:', e);
-    });
+  if (client) {
+    client
+      .set(key, JSON.stringify(value), { EX: ttlSec })
+      .catch((e: any) =>
+        console.warn('[redis-cache] write failed:', e?.message ?? e)
+      );
   }
 
   return value;
@@ -135,12 +160,12 @@ export async function cached<T>(
  */
 export async function invalidate(key: string): Promise<void> {
   mem.delete(key);
-  const kv = await getKv();
-  if (kv) {
+  const client = await getRedis();
+  if (client) {
     try {
-      await kv.del(key);
-    } catch (e) {
-      console.warn('[kv-cache] KV delete failed:', e);
+      await client.del(key);
+    } catch (e: any) {
+      console.warn('[redis-cache] delete failed:', e?.message ?? e);
     }
   }
 }
@@ -148,9 +173,6 @@ export async function invalidate(key: string): Promise<void> {
 // =============== Suggested TTLs ===============
 //
 // These are exported as constants so callers don't have to make up numbers.
-// The numbers reflect "how stale can this data be without the user noticing
-// or caring?" — match data is immutable so we cache it for days; rank
-// changes hourly so we cache for minutes.
 
 export const TTL = {
   /** Match data: immutable once the game is over. Cache for a week. */
