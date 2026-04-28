@@ -8,6 +8,7 @@ import {
 } from '@/lib/riot';
 import { batchWithLimit } from '@/lib/batch';
 import { getLatestVersion, getAllChampions } from '@/lib/ddragon';
+import { getLiveStreams } from '@/lib/twitch';
 
 // Refresh cadence — 60 seconds. Riot dev keys allow ~100 req / 2 min,
 // and we issue ~1 request per pro to check live status (after PUUIDs are
@@ -32,6 +33,12 @@ export interface LivePro {
   queueId: number;
   /** Game length in seconds */
   gameLength: number;
+  /** Twitch login if this pro is also currently streaming on Twitch.
+   *  When present, the client can render an embedded player instead
+   *  of (or in addition to) the spectate-script download. */
+  twitchUsername?: string;
+  /** Number of viewers on the stream right now. */
+  twitchViewers?: number;
 }
 
 // Module-level cache of resolved PUUIDs so we don't pay the account-by-riot-id
@@ -121,6 +128,36 @@ export async function GET() {
   // rate limiting. With ~55 pros that's ~11 sequential batches.
   const results = await batchWithLimit(PROS, 5, (p) => checkPro(p, champByKey));
   const live = results.filter((r): r is LivePro => r !== null);
+
+  // Twitch enrichment: for any LivePro whose pro entry has a twitchUsername,
+  // check if they're currently streaming. Cheap — one batched Twitch
+  // request, cached 60s. Silently skipped if Twitch creds aren't set.
+  const liveSlugs = new Set(live.map((l) => l.slug));
+  const twitchCandidates: string[] = [];
+  for (const pro of PROS) {
+    if (liveSlugs.has(pro.slug) && pro.twitchUsername) {
+      twitchCandidates.push(pro.twitchUsername);
+    }
+  }
+  if (twitchCandidates.length > 0) {
+    try {
+      const streams = await getLiveStreams(twitchCandidates);
+      const byLogin = new Map(streams.map((s) => [s.user_login, s]));
+      for (const livePro of live) {
+        const pro = PROS.find((p) => p.slug === livePro.slug);
+        const twitch = pro?.twitchUsername
+          ? byLogin.get(pro.twitchUsername.toLowerCase())
+          : undefined;
+        if (twitch) {
+          livePro.twitchUsername = pro!.twitchUsername;
+          livePro.twitchViewers = twitch.viewer_count;
+        }
+      }
+    } catch (e: any) {
+      // Twitch is best-effort — failures shouldn't break the whole route.
+      console.warn('[pros-live] Twitch enrichment failed:', e?.message ?? e);
+    }
+  }
 
   return NextResponse.json(
     {

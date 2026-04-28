@@ -28,6 +28,12 @@ export interface Pro {
   role: 'Top' | 'Jungle' | 'Mid' | 'Bot' | 'Support' | 'Coach';
   primaryRegion: Platform;
   accounts: ProAccount[];
+  /** Twitch login (lowercase, the slug from twitch.tv/<login>). Optional —
+   * only set for pros who actually stream on Twitch with reasonable
+   * frequency. When set and the channel is live, we can embed the
+   * stream player directly instead of just offering the spectate
+   * download. */
+  twitchUsername?: string;
 }
 
 export const PROS: Pro[] = [
@@ -306,6 +312,7 @@ export const PROS: Pro[] = [
       { gameName: 'A 99 mid laner',     tagLine: 'EUW',  region: 'euw1' },
       { gameName: 'Speedy McJingles',   tagLine: 'EUW',  region: 'euw1' },
     ],
+    twitchUsername: 'caps',
   },
   {
     slug: 'hans-sama',
@@ -351,6 +358,7 @@ export const PROS: Pro[] = [
       { gameName: 'G2 Argøs',          tagLine: 'EUW',   region: 'euw1' },
       { gameName: 'NavikrozaR',        tagLine: 'EUW',   region: 'euw1' },
     ],
+    twitchUsername: 'razork',
   },
   {
     slug: 'vladi',
@@ -366,6 +374,7 @@ export const PROS: Pro[] = [
       { gameName: 'YONEXDXD',           tagLine: 'EUW',  region: 'euw1' },
       { gameName: 'Melissoula',         tagLine: 'EUW',  region: 'euw1' },
     ],
+    twitchUsername: 'vladi',
   },
   {
     slug: 'upset',
@@ -381,6 +390,7 @@ export const PROS: Pro[] = [
       { gameName: 'asdfasdf',         tagLine: '0308',  region: 'euw1' },
       { gameName: 'FNC Upset',        tagLine: '0308',  region: 'euw1' },
     ],
+    twitchUsername: 'upsetlol',
   },
   {
     slug: 'lospa',
@@ -421,6 +431,7 @@ export const PROS: Pro[] = [
       { gameName: 'KC Yiken', tagLine: '1111', region: 'euw1' },
       { gameName: 'Yikos',    tagLine: 'EUW',  region: 'euw1' },
     ],
+    twitchUsername: 'yike_lol',
   },
   {
     slug: 'kyeahoo',
@@ -502,6 +513,7 @@ export const PROS: Pro[] = [
       { gameName: 'Chongus',           tagLine: 'EUW',   region: 'euw1' },
       { gameName: 'everything to me',  tagLine: 'EUW',   region: 'euw1' },
     ],
+    twitchUsername: 'bwipo',
   },
   {
     slug: 'velja',
@@ -518,6 +530,7 @@ export const PROS: Pro[] = [
       { gameName: 'Frame Mogged',   tagLine: '2203',  region: 'euw1' },
       { gameName: 'Thymanna',       tagLine: 'EUW',   region: 'euw1' },
     ],
+    twitchUsername: 'velja',
   },
   {
     slug: 'nemesis',
@@ -534,6 +547,7 @@ export const PROS: Pro[] = [
       { gameName: 'tehgeokiller',       tagLine: 'EUW',  region: 'euw1' },
       { gameName: 'Mr Ascendant',       tagLine: 'EUW',  region: 'euw1' },
     ],
+    twitchUsername: 'nemesis_lol',
   },
   {
     slug: 'crownie',
@@ -560,6 +574,7 @@ export const PROS: Pro[] = [
       { gameName: 'Rekkles', tagLine: '1996',  region: 'euw1' },
       { gameName: 'Rekkles', tagLine: 'SUP',   region: 'euw1' },
     ],
+    twitchUsername: 'rekkles',
   },
   {
     slug: 'thebausffs',
@@ -576,6 +591,7 @@ export const PROS: Pro[] = [
       { gameName: 'Bosch Drill',      tagLine: 'EUW',   region: 'euw1' },
       { gameName: 'Mollusca Slime',   tagLine: 'Yummy', region: 'euw1' },
     ],
+    twitchUsername: 'thebausffs',
   },
 
   // ================================ Team Liquid (LCS) ================================
@@ -660,6 +676,7 @@ export const PROS: Pro[] = [
       { gameName: 'Zven',       tagLine: 'KEKW1', region: 'euw1' },
       { gameName: 'oi bruvv',   tagLine: 'EUW',   region: 'euw1' },
     ],
+    twitchUsername: 'zvenlol',
   },
   {
     slug: 'vulcan',
