@@ -117,15 +117,9 @@ export async function cached<T>(
   ttlSec: number,
   fetcher: () => Promise<T>
 ): Promise<T> {
-  // DEBUG: heartbeat log — confirms this function is being called.
-  // Once we've verified Redis is connecting, this log line should be
-  // removed (it'll spam logs). Look for it in Vercel function logs.
-  console.log(`[cache] called for key=${key.substring(0, 80)}`);
-
   // 1. Memory hit?
   const memHit = memGet(key);
   if (memHit !== null) {
-    console.log(`[cache] mem HIT for key=${key.substring(0, 80)}`);
     return memHit as T;
   }
 

@@ -10,6 +10,7 @@ import {
   getChampionMap,
 } from '@/lib/ddragon';
 import { formatDuration, tierColor } from '@/lib/format';
+import { SpectateButton } from './SpectateButton';
 
 interface ScoutMap {
   [puuid: string]: {
@@ -92,9 +93,18 @@ export function LiveGameBanner({
   const team1 = game.participants.filter((p) => p.teamId === 100);
   const team2 = game.participants.filter((p) => p.teamId === 200);
 
+  // Pull this player's Riot ID so we can build a spectate-by-id download.
+  // The API route uses gameName + tagLine to look up the live game and
+  // generate the script.
+  const me = game.participants.find((p) => p.puuid === puuid);
+  const meRiotId = me?.riotId ?? me?.summonerName ?? '';
+  const [meGameName, meTagLine] = meRiotId.includes('#')
+    ? meRiotId.split('#')
+    : [meRiotId, ''];
+
   return (
     <div className="bg-gradient-to-r from-win/10 to-accent/10 border border-win/40 rounded-lg p-4 mb-6">
-      <div className="flex items-center justify-between mb-3">
+      <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
         <div className="flex items-center gap-2">
           <span className="relative flex h-2.5 w-2.5">
             <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-win opacity-75" />
@@ -103,7 +113,17 @@ export function LiveGameBanner({
           <h2 className="font-semibold">Live Game</h2>
           <span className="text-xs text-gray-400">· {queueName(game.queueConfigId)}</span>
         </div>
-        <p className="text-sm text-gray-400 font-mono">{formatDuration(elapsed)}</p>
+        <div className="flex items-center gap-3">
+          {meGameName && meTagLine && (
+            <SpectateButton
+              region={region}
+              gameName={meGameName}
+              tagLine={meTagLine}
+              variant="full"
+            />
+          )}
+          <p className="text-sm text-gray-400 font-mono">{formatDuration(elapsed)}</p>
+        </div>
       </div>
 
       <div className="grid md:grid-cols-2 gap-3">
