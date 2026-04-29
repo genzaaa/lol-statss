@@ -111,7 +111,9 @@ export function LiveGameBanner({
             <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-win" />
           </span>
           <h2 className="font-semibold">Live Game</h2>
-          <span className="text-xs text-gray-400">· {queueName(game.queueConfigId)}</span>
+          {typeof game.queueConfigId === 'number' ? (
+            <span className="text-xs text-gray-400">· {queueName(game.queueConfigId)}</span>
+          ) : null}
         </div>
         <div className="flex items-center gap-3">
           {meGameName && meTagLine && (
@@ -135,7 +137,15 @@ export function LiveGameBanner({
             <p className={`text-xs font-semibold uppercase tracking-wider mb-2 ${color}`}>
               {label}
             </p>
-            <div className="space-y-2">
+            {team.length === 0 ? (
+              <p className="text-xs text-gray-500 italic">
+                Player data not available for this side.{' '}
+                <span className="text-gray-600">
+                  Riot has reduced spectator data on some game modes for player anonymity.
+                </span>
+              </p>
+            ) : (
+              <div className="space-y-2">
               {team.map((p) => {
                 const s = scout[p.puuid];
                 const isMe = p.puuid === puuid;
@@ -238,6 +248,7 @@ export function LiveGameBanner({
                 );
               })}
             </div>
+            )}
           </div>
         ))}
       </div>
