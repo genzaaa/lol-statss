@@ -132,39 +132,43 @@ async function findSharedMatches(
   const aPuuids = new Set(a.puuids.map((p) => p.puuid));
   const bPuuids = new Set(b.puuids.map((p) => p.puuid));
 
-  const summaries = await batchWithLimit(capped, 4, async (matchId) => {
-    const region = platformFromMatchId(matchId);
-    if (!region) return null;
-    try {
-      const match = await getMatch(region, matchId);
-      const aPart = match.info.participants.find((p) => aPuuids.has(p.puuid));
-      const bPart = match.info.participants.find((p) => bPuuids.has(p.puuid));
-      if (!aPart || !bPart) return null;
-      const winningSide =
-        match.info.teams?.find((t) => t.win)?.teamId ??
-        (aPart.win ? aPart.teamId : aPart.teamId === 100 ? 200 : 100);
-      return {
-        matchId,
-        region,
-        winningSide,
-        aWon: aPart.win,
-        sameTeam: aPart.teamId === bPart.teamId,
-        aChampion: aPart.championName,
-        aK: aPart.kills,
-        aD: aPart.deaths,
-        aA: aPart.assists,
-        bChampion: bPart.championName,
-        bK: bPart.kills,
-        bD: bPart.deaths,
-        bA: bPart.assists,
-        gameDuration: match.info.gameDuration,
-        gameEndTimestamp: match.info.gameEndTimestamp,
-        queueId: match.info.queueId,
-      } satisfies SharedMatchSummary;
-    } catch {
-      return null;
+  const summaries: Array<SharedMatchSummary | null> = await batchWithLimit(
+    capped,
+    4,
+    async (matchId): Promise<SharedMatchSummary | null> => {
+      const region = platformFromMatchId(matchId);
+      if (!region) return null;
+      try {
+        const match = await getMatch(region, matchId);
+        const aPart = match.info.participants.find((p) => aPuuids.has(p.puuid));
+        const bPart = match.info.participants.find((p) => bPuuids.has(p.puuid));
+        if (!aPart || !bPart) return null;
+        const winningSide =
+          match.info.teams?.find((t) => t.win)?.teamId ??
+          (aPart.win ? aPart.teamId : aPart.teamId === 100 ? 200 : 100);
+        return {
+          matchId,
+          region,
+          winningSide,
+          aWon: aPart.win,
+          sameTeam: aPart.teamId === bPart.teamId,
+          aChampion: aPart.championName,
+          aK: aPart.kills,
+          aD: aPart.deaths,
+          aA: aPart.assists,
+          bChampion: bPart.championName,
+          bK: bPart.kills,
+          bD: bPart.deaths,
+          bA: bPart.assists,
+          gameDuration: match.info.gameDuration,
+          gameEndTimestamp: match.info.gameEndTimestamp,
+          queueId: match.info.queueId,
+        };
+      } catch {
+        return null;
+      }
     }
-  });
+  );
 
   return summaries
     .filter((s): s is SharedMatchSummary => s !== null)
