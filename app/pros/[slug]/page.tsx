@@ -15,6 +15,7 @@ import {
 import { getLatestVersion, profileIconUrl, champIconUrl } from '@/lib/ddragon';
 import { winrate, tierColor } from '@/lib/format';
 import { batchWithLimit } from '@/lib/batch';
+import { CompareToPicker } from '@/components/CompareToPicker';
 
 export const revalidate = 600; // 10 minutes — pros' SoloQ activity changes during the day
 
@@ -266,6 +267,9 @@ export default async function ProPage({ params }: Props) {
           version={version}
         />
       )}
+
+      {/* Compare to another pro */}
+      <CompareToPicker currentPro={pro} />
 
       {/* Sections per region */}
       {orderedRegions.map((region) => {

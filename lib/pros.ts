@@ -114,7 +114,8 @@ export const PROS: Pro[] = [
     team: 'Gen.G',
     role: 'Top',
     primaryRegion: 'kr',
-    accounts: [{ gameName: 'asdfzxcv', tagLine: '3347', region: 'kr' }],
+    accounts: [
+      { gameName: 'kiin', tagLine: 'KR1', region: 'kr' },{ gameName: 'asdfzxcv', tagLine: '3347', region: 'kr' }],
   },
   {
     slug: 'canyon',
@@ -122,8 +123,9 @@ export const PROS: Pro[] = [
     country: 'South Korea',
     team: 'Gen.G',
     role: 'Jungle',
-    primaryRegion: 'euw1',
+    primaryRegion: 'kr',
     accounts: [
+      { gameName: 'Gen G Canyon', tagLine: '캐니언', region: 'kr' },
       { gameName: 'npAWwznisdpExCDc', tagLine: 'EUW',   region: 'euw1' },
       { gameName: 'Eventual victory',  tagLine: '34148', region: 'euw1' },
       { gameName: 'happy gαme',        tagLine: 'EUW',   region: 'euw1' },
@@ -194,8 +196,9 @@ export const PROS: Pro[] = [
     country: 'South Korea',
     team: 'Hanwha Life Esports',
     role: 'Bot',
-    primaryRegion: 'euw1',
+    primaryRegion: 'kr',
     accounts: [
+      { gameName: 'T1 Gumayusi', tagLine: 'KR1', region: 'kr' },
       { gameName: 'Giant Monster', tagLine: '09494', region: 'euw1' },
       { gameName: 'MQLWKENRK',      tagLine: 'EUW',   region: 'euw1' },
       { gameName: 'taco genius',    tagLine: '8848',  region: 'euw1' },
