@@ -5,6 +5,7 @@ import { useState } from 'react';
 import { PLATFORM_LABELS, type Platform } from '@/lib/regions';
 import { RecentSearches, pushRecentSearch } from '@/components/RecentSearches';
 import { LiveProsWidget } from '@/components/LiveProsWidget';
+import { FavoritesWidget } from '@/components/FavoritesWidget';
 
 const REGIONS = Object.keys(PLATFORM_LABELS) as Array<keyof typeof PLATFORM_LABELS>;
 
@@ -81,6 +82,8 @@ export default function Home() {
       </div>
 
       <RecentSearches />
+
+      <FavoritesWidget />
 
       <LiveProsWidget />
 

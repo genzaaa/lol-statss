@@ -11,6 +11,7 @@ import {
 } from '@/lib/ddragon';
 import { kda } from '@/lib/format';
 import { MatchTimeline } from './MatchTimeline';
+import { MatchAnalysis } from './MatchAnalysis';
 import { ReplayHelp } from './ReplayHelp';
 
 // Extract the Platform from the match ID prefix.
@@ -73,6 +74,11 @@ export function MatchDetail({
           <TeamObjectives team={redTeam} label="Red side" side="red" />
         </div>
       )}
+
+      {/* Match analysis — only on losses, where the user is most likely
+        to want signals about what went wrong. Component renders nothing
+        if no notable signals are found. */}
+      {me && !me.win && <MatchAnalysis match={match} me={me} />}
 
       {/* Team tables */}
       <div className="space-y-3">

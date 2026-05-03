@@ -4,6 +4,14 @@
 const DDRAGON = 'https://ddragon.leagueoflegends.com';
 const CDRAGON = 'https://raw.communitydragon.org/latest';
 
+// Fallback version used for synchronous URL builders that can't await
+// getLatestVersion() (like icon URL helpers called during render). Pin
+// to a recent stable patch — the assets path is keyed by patch but the
+// CDN serves all historical versions, so this just needs to be "recent
+// enough that all current spells/items exist". Bump occasionally if
+// new content stops appearing.
+const DDRAGON_FALLBACK_VERSION = '15.1.1';
+
 // We fetch the current game version once and cache it module-wide.
 let versionPromise: Promise<string> | null = null;
 
@@ -58,9 +66,13 @@ const SPELL_KEY_BY_ID: Record<number, string> = {
 export function summonerSpellIconUrl(spellId: number): string {
   const key = SPELL_KEY_BY_ID[spellId];
   if (!key) return '';
-  // Data Dragon stores spell images under img/spell/<Key>.png
-  // We use a fixed recent version path via CommunityDragon which stays updated.
-  return `${CDRAGON}/plugins/rcp-be-lol-game-data/global/default/data/spells/icons2d/${key.toLowerCase()}.png`;
+  // Use Data Dragon's `img/spell/<Key>.png` path. This has been stable
+  // for years and uses the original PascalCase key directly. CommunityDragon
+  // also serves these but with a different naming convention; keeping this
+  // path on Data Dragon avoids the convention mismatch.
+  // Note: this caches indefinitely on the CDN so version-pinning isn't
+  // important for correctness.
+  return `${DDRAGON}/cdn/${DDRAGON_FALLBACK_VERSION}/img/spell/${key}.png`;
 }
 
 // Legacy alias kept so any existing imports still work
