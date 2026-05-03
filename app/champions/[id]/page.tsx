@@ -133,6 +133,12 @@ export default async function ChampionPage({ params }: Props) {
                 </span>
               ))}
             </div>
+            <Link
+              href={`/champions/${detail.id}/pro-mastery`}
+              className="inline-block mt-2 text-[11px] uppercase tracking-wider text-accent hover:underline"
+            >
+              See pro mastery comparison →
+            </Link>
           </div>
           <Link
             href="/champions"

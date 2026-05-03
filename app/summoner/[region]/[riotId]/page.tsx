@@ -22,6 +22,7 @@ import { MasteryPanel } from '@/components/MasteryPanel';
 import { ChampionSummary } from '@/components/ChampionSummary';
 import { LiveGameBanner } from '@/components/LiveGameBanner';
 import { ProfileStats } from '@/components/ProfileStats';
+import { FavoriteButton } from '@/components/FavoriteButton';
 import { winrate } from '@/lib/format';
 
 // Revalidate the page every 60 seconds
@@ -199,12 +200,20 @@ export default async function SummonerPage({ params }: Props) {
             {PLATFORM_LABELS[region]} · Level {summoner.summonerLevel}
           </p>
         </div>
-        <Link
-          href="/"
-          className="text-xs text-gray-400 hover:text-accent transition-colors border border-line rounded-md px-3 py-1.5"
-        >
-          ← New search
-        </Link>
+        <div className="flex items-center gap-2 flex-wrap">
+          <FavoriteButton
+            region={region}
+            gameName={account.gameName}
+            tagLine={account.tagLine}
+            rankLabel={solo ? `${solo.tier} ${solo.rank} ${solo.leaguePoints}LP` : undefined}
+          />
+          <Link
+            href="/"
+            className="text-xs text-gray-400 hover:text-accent transition-colors border border-line rounded-md px-3 py-1.5"
+          >
+            ← New search
+          </Link>
+        </div>
       </div>
 
       {/* Live game banner */}
