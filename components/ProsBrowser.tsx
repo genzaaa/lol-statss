@@ -1,10 +1,9 @@
 'use client';
 
-import { useEffect, useMemo, useState, useCallback } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useRouter, usePathname, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import type { Pro } from '@/lib/pros';
-import { PLATFORM_LABELS, type Platform } from '@/lib/regions';
 
 // A league has one or more teams; we display teams grouped under a league
 // header. The leagues are just a best-effort grouping; if a team doesn't
@@ -46,8 +45,8 @@ function leagueLabel(l: League): string {
   return 'Other';
 }
 
-// How many pros to show in each league before "Show all" is clicked
-const DEFAULT_PER_LEAGUE = 4;
+// Default visible pros count per team (typically 5 for a full LCK roster
+// without coach, up to ~7 with subs and coach). All shown by default.
 
 export function ProsBrowser({ pros }: { pros: Pro[] }) {
   const router = useRouter();
@@ -56,7 +55,6 @@ export function ProsBrowser({ pros }: { pros: Pro[] }) {
 
   // Initialize query from URL so /pros?q=faker is shareable
   const [query, setQuery] = useState(() => searchParams?.get('q') ?? '');
-  const [expandedLeagues, setExpandedLeagues] = useState<Set<League>>(new Set());
 
   // Debounced URL sync — keeps ?q= in sync but without spamming router.replace
   useEffect(() => {
@@ -89,27 +87,43 @@ export function ProsBrowser({ pros }: { pros: Pro[] }) {
     });
   }, [pros, query]);
 
-  // Group filtered results by league
-  const grouped = useMemo(() => {
-    const groups = new Map<League, Pro[]>();
-    for (const l of LEAGUE_ORDER) groups.set(l, []);
+  // Group filtered results by league, then by team within each league.
+  // Within a team, sort by role for the standard Top→Jungle→Mid→Bot→Support
+  // reading order that matches roster pages on OP.GG / Leaguepedia.
+  const ROLE_ORDER: Record<string, number> = {
+    Top: 0,
+    Jungle: 1,
+    Mid: 2,
+    Bot: 3,
+    Support: 4,
+    Coach: 5,
+  };
+
+  const groupedByLeagueAndTeam = useMemo(() => {
+    // Map<League, Map<TeamName, Pro[]>>
+    const out = new Map<League, Map<string, Pro[]>>();
+    for (const l of LEAGUE_ORDER) out.set(l, new Map());
     for (const pro of filtered) {
-      const l = leagueFor(pro.team);
-      groups.get(l)!.push(pro);
+      const league = leagueFor(pro.team);
+      const teams = out.get(league)!;
+      const arr = teams.get(pro.team) ?? [];
+      arr.push(pro);
+      teams.set(pro.team, arr);
     }
-    return groups;
+    // Sort each team's roster by role
+    for (const teams of out.values()) {
+      for (const arr of teams.values()) {
+        arr.sort(
+          (a, b) =>
+            (ROLE_ORDER[a.role] ?? 99) - (ROLE_ORDER[b.role] ?? 99) ||
+            a.name.localeCompare(b.name)
+        );
+      }
+    }
+    return out;
   }, [filtered]);
 
   const isSearching = query.trim().length > 0;
-
-  const toggleExpand = useCallback((l: League) => {
-    setExpandedLeagues((prev) => {
-      const next = new Set(prev);
-      if (next.has(l)) next.delete(l);
-      else next.add(l);
-      return next;
-    });
-  }, []);
 
   return (
     <div className="space-y-6">
@@ -153,18 +167,15 @@ export function ProsBrowser({ pros }: { pros: Pro[] }) {
         </div>
       )}
 
-      {/* League sections */}
+      {/* League sections — each league has team subsections, each team has its roster */}
       {LEAGUE_ORDER.map((league) => {
-        const prosInLeague = grouped.get(league) ?? [];
-        if (prosInLeague.length === 0) return null;
-
-        // When actively searching we always show everything matched.
-        // When browsing (no query), limit to DEFAULT_PER_LEAGUE unless expanded.
-        const expanded = isSearching || expandedLeagues.has(league);
-        const visible = expanded
-          ? prosInLeague
-          : prosInLeague.slice(0, DEFAULT_PER_LEAGUE);
-        const hiddenCount = prosInLeague.length - visible.length;
+        const teamsMap = groupedByLeagueAndTeam.get(league) ?? new Map();
+        const teamNames = Array.from(teamsMap.keys()).sort();
+        const totalProsInLeague = teamNames.reduce(
+          (s, t) => s + (teamsMap.get(t)?.length ?? 0),
+          0
+        );
+        if (totalProsInLeague === 0) return null;
 
         return (
           <section key={league}>
@@ -172,33 +183,23 @@ export function ProsBrowser({ pros }: { pros: Pro[] }) {
               <h2 className="text-sm font-semibold uppercase tracking-wider text-gray-400">
                 {leagueLabel(league)}
                 <span className="text-gray-600 font-normal ml-2">
-                  ({prosInLeague.length})
+                  ({totalProsInLeague} {totalProsInLeague === 1 ? 'player' : 'players'})
                 </span>
               </h2>
-              {!isSearching && hiddenCount > 0 && (
-                <button
-                  type="button"
-                  onClick={() => toggleExpand(league)}
-                  className="text-xs text-gray-400 hover:text-accent transition-colors"
-                >
-                  Show all {prosInLeague.length}
-                </button>
-              )}
-              {!isSearching && expanded && prosInLeague.length > DEFAULT_PER_LEAGUE && (
-                <button
-                  type="button"
-                  onClick={() => toggleExpand(league)}
-                  className="text-xs text-gray-400 hover:text-accent transition-colors"
-                >
-                  Show fewer
-                </button>
-              )}
             </div>
 
-            <div className="grid sm:grid-cols-2 lg:grid-cols-2 gap-3">
-              {visible.map((pro) => (
-                <ProCard key={pro.slug} pro={pro} />
-              ))}
+            {/* One row per team */}
+            <div className="space-y-4">
+              {teamNames.map((teamName) => {
+                const roster = teamsMap.get(teamName) ?? [];
+                return (
+                  <TeamSection
+                    key={teamName}
+                    teamName={teamName}
+                    roster={roster}
+                  />
+                );
+              })}
             </div>
           </section>
         );
@@ -207,64 +208,57 @@ export function ProsBrowser({ pros }: { pros: Pro[] }) {
   );
 }
 
-// ---------------- Pro card ----------------
+// ---------------- Team section ----------------
 
-function ProCard({ pro }: { pro: Pro }) {
+function TeamSection({
+  teamName,
+  roster,
+}: {
+  teamName: string;
+  roster: Pro[];
+}) {
   return (
     <div className="bg-panel border border-line rounded-lg p-4">
-      <Link
-        href={`/pros/${pro.slug}`}
-        className="block group"
-      >
-        <div className="flex items-baseline justify-between gap-2 mb-1">
-          <h3 className="font-semibold text-lg group-hover:text-accent transition-colors">
-            {pro.name}
-          </h3>
-          <RoleBadge role={pro.role} />
-        </div>
-        <p className="text-xs text-gray-400 mb-3">
-          <span className="text-gray-200">{pro.team}</span>
-          <span className="text-gray-600"> · </span>
-          <span>{pro.country}</span>
+      <div className="flex items-baseline justify-between mb-3 flex-wrap gap-2">
+        <h3 className="font-semibold text-base">{teamName}</h3>
+        <p className="text-[10px] uppercase tracking-wider text-gray-500">
+          {roster.length} {roster.length === 1 ? 'player' : 'players'}
         </p>
-      </Link>
-
-      <div className="space-y-1">
-        <div className="flex items-baseline justify-between mb-1">
-          <p className="text-[10px] uppercase tracking-wider text-gray-500">
-            Accounts ({pro.accounts.length})
-          </p>
-          <Link
-            href={`/pros/${pro.slug}`}
-            className="text-[10px] text-gray-500 hover:text-accent transition-colors"
-          >
-            Verify live →
-          </Link>
-        </div>
-        {pro.accounts.map((acc, i) => {
-          const href = `/summoner/${acc.region}/${encodeURIComponent(
-            acc.gameName
-          )}-${encodeURIComponent(acc.tagLine)}`;
-          return (
-            <Link
-              key={`${pro.slug}-${i}`}
-              href={href}
-              className="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-panel2 text-sm transition-colors group"
-            >
-              <span className="text-[10px] uppercase font-mono text-gray-500 w-10 flex-shrink-0">
-                {PLATFORM_LABELS[acc.region]}
-              </span>
-              <span className="text-gray-200 truncate group-hover:text-accent transition-colors">
-                {acc.gameName}
-              </span>
-              <span className="text-gray-500 truncate">#{acc.tagLine}</span>
-            </Link>
-          );
-        })}
+      </div>
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2">
+        {roster.map((pro) => (
+          <RosterPlayerCard key={pro.slug} pro={pro} />
+        ))}
       </div>
     </div>
   );
 }
+
+// Compact player card for the roster grid — focused on identity and role,
+// not on the full account list (which lives on /pros/<slug>).
+function RosterPlayerCard({ pro }: { pro: Pro }) {
+  return (
+    <Link
+      href={`/pros/${pro.slug}`}
+      className="block bg-panel2/40 hover:bg-panel2 border border-line hover:border-accent rounded-md p-2.5 transition-colors group"
+    >
+      <div className="flex items-baseline justify-between gap-2 mb-1">
+        <p className="font-semibold text-sm text-gray-100 group-hover:text-accent transition-colors truncate">
+          {pro.name}
+        </p>
+        <RoleBadge role={pro.role} />
+      </div>
+      <p className="text-[10px] text-gray-500 truncate" title={pro.country}>
+        {pro.country}
+      </p>
+      <p className="text-[10px] text-gray-600 mt-1">
+        {pro.accounts.length} {pro.accounts.length === 1 ? 'account' : 'accounts'}
+      </p>
+    </Link>
+  );
+}
+
+// ---------------- Pro card ----------------
 
 function RoleBadge({ role }: { role: Pro['role'] }) {
   const colors: Record<Pro['role'], string> = {
