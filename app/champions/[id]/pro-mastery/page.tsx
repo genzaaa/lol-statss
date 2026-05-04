@@ -107,12 +107,13 @@ async function masteryForPro(
 }
 
 export default async function ProMasteryPage({ params }: Props) {
-  // Validate champion key by checking it's in the Data Dragon list
-  const [version, championMap] = await Promise.all([
+  // Validate champion key by checking it's in the Data Dragon list.
+  // getAllChampions returns ChampionSummary[] (an array), not a record.
+  const [version, championList] = await Promise.all([
     getLatestVersion(),
     getAllChampions(),
   ]);
-  const champion = championMap[params.id];
+  const champion = championList.find((c) => c.id === params.id);
   if (!champion) notFound();
 
   // Run the aggregation across all pros. This is the expensive part —
