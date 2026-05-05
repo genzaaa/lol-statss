@@ -198,3 +198,26 @@ export const TTL = {
   /** Challenger league: top of ladder. 5 minutes. */
   LEAGUE: 5 * 60,
 } as const;
+
+/**
+ * Empty the cache. Used by the admin flush endpoint when Redis hits OOM.
+ *
+ * Returns:
+ *   { ok: true, info: 'flushed via FLUSHDB' }   — success
+ *   { ok: false, info: 'redis not configured' } — REDIS_URL missing
+ *   { ok: false, info: <error message> }        — connection / command failed
+ *
+ * We use FLUSHDB rather than FLUSHALL because some hosted Redis providers
+ * disable FLUSHALL but allow per-database flushes. FLUSHDB is what you want
+ * when you're using a single shared database (which is our setup).
+ */
+export async function flushAll(): Promise<{ ok: boolean; info: string }> {
+  const client = await getRedis();
+  if (!client) return { ok: false, info: 'redis not configured' };
+  try {
+    const reply = await client.flushDb();
+    return { ok: true, info: `flushed via FLUSHDB: ${reply}` };
+  } catch (e: any) {
+    return { ok: false, info: e?.message ?? 'unknown error during flush' };
+  }
+}

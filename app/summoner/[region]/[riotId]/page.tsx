@@ -245,7 +245,7 @@ export default async function SummonerPage({ params }: Props) {
                     cy="18"
                     r="15"
                     fill="none"
-                    stroke="#232b42"
+                    stroke="rgb(var(--color-line))"
                     strokeWidth="3"
                   />
                   <circle

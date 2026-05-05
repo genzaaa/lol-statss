@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import './globals.css';
 import { CommandPalette } from '@/components/CommandPalette';
+import { ThemeToggle, themeInitScript } from '@/components/ThemeToggle';
 
 export const metadata: Metadata = {
   title: 'LoL Stats',
@@ -11,6 +12,12 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en">
+      <head>
+        {/* Sets data-theme on <html> before first paint to avoid flashing
+            the wrong theme on initial load. Reads from localStorage with
+            OS preference as fallback. */}
+        <script dangerouslySetInnerHTML={{ __html: themeInitScript }} />
+      </head>
       <body className="antialiased">
         <nav className="border-b border-line bg-panel/60 backdrop-blur-sm sticky top-0 z-50">
           <div className="max-w-6xl mx-auto px-4 h-14 flex items-center justify-between">
@@ -45,6 +52,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                 Quick search:
                 <kbd className="bg-panel2 rounded px-1 font-mono">⌘K</kbd>
               </span>
+              <ThemeToggle />
             </div>
           </div>
         </nav>
